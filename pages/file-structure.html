@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件结构图谱 - ArkTS Knowledge Graph</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/dashboard.css">
+    <script src="../libs/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .main-content > .top-bar {
+            min-height: auto;
+            padding: 8px 24px;
+        }
+        
+        .main-content > .dashboard-content {
+            padding: 16px;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .visualization-container {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 16px;
+            height: 100%;
+            min-height: 0;
+        }
+        
+        .graph-main {
+            background: var(--bg-card);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .graph-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+        
+        .graph-content {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            min-height: 400px;
+        }
+        
+        .info-panel {
+            background: var(--bg-card);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .panel-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .panel-header h3 {
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        
+        .file-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-box {
+            background: var(--bg-secondary);
+            padding: 12px;
+            border-radius: var(--border-radius);
+            text-align: center;
+        }
+        
+        .stat-box .number {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .stat-box .label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        
+        .file-list {
+            list-style: none;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .file-item:hover {
+            background: var(--bg-secondary);
+        }
+        
+        .file-item i {
+            color: var(--warning-color);
+        }
+        
+        .file-item.folder i {
+            color: var(--primary-color);
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-name {
+            font-size: 0.875rem;
+            color: var(--text-primary);
+        }
+        
+        .file-meta {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .view-modes {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+        
+        .view-mode-btn {
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 0.8125rem;
+            transition: var(--transition);
+        }
+        
+        .view-mode-btn:hover,
+        .view-mode-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        .breadcrumb a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        
+        .breadcrumb-separator {
+            color: var(--text-muted);
+        }
+        
+        #fileTreeView,
+        #fileSunburstView {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .node rect {
+            fill: var(--bg-tertiary);
+            stroke: var(--border-color);
+            stroke-width: 1.5px;
+            rx: 4;
+        }
+        
+        .node text {
+            font-size: 11px;
+            fill: var(--text-primary);
+        }
+        
+        .link {
+            fill: none;
+            stroke: var(--border-color);
+            stroke-width: 1.5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边导航栏 -->
+        <nav class="sidebar" aria-label="主导航">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-project-diagram"></i>
+                    <span>ArkTS KG</span>
+                </div>
+            </div>
+            
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="../index.html" class="nav-link">
+                        <i class="fas fa-home"></i>
+                        <span>项目概览</span>
+                    </a>
+                </li>
+                <li class="nav-item active">
+                    <a href="file-structure.html" class="nav-link">
+                        <i class="fas fa-folder-tree"></i>
+                        <span>文件结构图谱</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="class-hierarchy.html" class="nav-link">
+                        <i class="fas fa-sitemap"></i>
+                        <span>类继承关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="function-calls.html" class="nav-link">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>函数调用关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="module-deps.html" class="nav-link">
+                        <i class="fas fa-cubes"></i>
+                        <span>模块依赖关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="statistics.html" class="nav-link">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>代码统计分析</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="query.html" class="nav-link">
+                        <i class="fas fa-search"></i>
+                        <span>自然语言查询</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="breadcrumb">
+                    <a href="../index.html">首页</a>
+                    <span class="breadcrumb-separator">/</span>
+                    <span>文件结构图谱</span>
+                </div>
+                <div class="top-bar-actions">
+                    <button class="btn btn-icon" title="刷新">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="btn btn-icon" title="导出">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="dashboard-content">
+                <div class="visualization-container">
+                    <!-- 主可视化区域 -->
+                    <div class="graph-main">
+                        <div class="graph-toolbar">
+                            <div class="view-modes">
+                                <button class="view-mode-btn active" onclick="switchView('tree', event)">
+                                    <i class="fas fa-sitemap"></i> 树形图
+                                </button>
+                                <button class="view-mode-btn" onclick="switchView('sunburst', event)">
+                                    <i class="fas fa-chart-pie"></i> 旭日图
+                                </button>
+                                <button class="view-mode-btn" onclick="switchView('treemap', event)">
+                                    <i class="fas fa-th"></i> 矩形树图
+                                </button>
+                            </div>
+                            <div style="margin-left: auto;">
+                                <button class="btn btn-sm" onclick="expandAll()">
+                                    <i class="fas fa-expand"></i> 展开全部
+                                </button>
+                                <button class="btn btn-sm" onclick="collapseAll()">
+                                    <i class="fas fa-compress"></i> 折叠全部
+                                </button>
+                            </div>
+                        </div>
+                        <div class="graph-content">
+                            <div id="fileTreeView"></div>
+                            <div id="fileSunburstView" style="display: none;"></div>
+                            <div id="fileTreemapView" style="display: none;"></div>
+                        </div>
+                    </div>
+
+                    <!-- 信息面板 -->
+                    <div class="info-panel">
+                        <div class="panel-header">
+                            <h3><i class="fas fa-info-circle"></i> 文件统计</h3>
+                        </div>
+                        <div class="panel-content">
+                            <div class="file-stats">
+                                <div class="stat-box">
+                                    <div class="number" id="totalFolders">24</div>
+                                    <div class="label">文件夹</div>
+                                </div>
+                                <div class="stat-box">
+                                    <div class="number" id="totalFiles">1,247</div>
+                                    <div class="label">文件</div>
+                                </div>
+                                <div class="stat-box">
+                                    <div class="number" id="totalCodeLines">156K</div>
+                                    <div class="label">代码行</div>
+                                </div>
+                                <div class="stat-box">
+                                    <div class="number" id="avgFileSize">12KB</div>
+                                    <div class="label">平均大小</div>
+                                </div>
+                            </div>
+
+                            <h4 style="margin: 20px 0 12px; font-size: 0.875rem; color: var(--text-secondary);">
+                                <i class="fas fa-folder-open"></i> 最大文件夹
+                            </h4>
+                            <ul class="file-list">
+                                <li class="file-item folder">
+                                    <i class="fas fa-folder"></i>
+                                    <div class="file-info">
+                                        <div class="file-name">src/components</div>
+                                        <div class="file-meta">128 files, 28.5K lines</div>
+                                    </div>
+                                </li>
+                                <li class="file-item folder">
+                                    <i class="fas fa-folder"></i>
+                                    <div class="file-info">
+                                        <div class="file-name">src/pages</div>
+                                        <div class="file-meta">89 files, 45.6K lines</div>
+                                    </div>
+                                </li>
+                                <li class="file-item folder">
+                                    <i class="fas fa-folder"></i>
+                                    <div class="file-info">
+                                        <div class="file-name">src/utils</div>
+                                        <div class="file-meta">67 files, 12.3K lines</div>
+                                    </div>
+                                </li>
+                                <li class="file-item folder">
+                                    <i class="fas fa-folder"></i>
+                                    <div class="file-info">
+                                        <div class="file-name">resources</div>
+                                        <div class="file-meta">156 files, 0 lines</div>
+                                    </div>
+                                </li>
+                            </ul>
+
+                            <h4 style="margin: 20px 0 12px; font-size: 0.875rem; color: var(--text-secondary);">
+                                <i class="fas fa-file-code"></i> 最大文件
+                            </h4>
+                            <ul class="file-list">
+                                <li class="file-item">
+                                    <i class="fas fa-file-code"></i>
+                                    <div class="file-info">
+                                        <div class="file-name">Home.ets</div>
+                                        <div class="file-meta">312 lines, 8.9KB</div>
+                                    </div>
+                                </li>
+                                <li class="file-item">
+                                    <i class="fas fa-file-code"></i>
+                                    <div class="file-info">
+                                        <div class="file-name">DataService.ts</div>
+                                        <div class="file-meta">234 lines, 6.7KB</div>
+                                    </div>
+                                </li>
+                                <li class="file-item">
+                                    <i class="fas fa-file-code"></i>
+                                    <div class="file-info">
+                                        <div class="file-name">Detail.ets</div>
+                                        <div class="file-meta">245 lines, 7.2KB</div>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../js/data.js"></script>
+    <script src="../js/graph.js"></script>
+    <script src="../js/charts.js"></script>
+    <script>
+        let treeVisualizer = null;
+        let sunburstVisualizer = null;
+        let currentView = 'tree';
+
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    initTreeView();
+                });
+            });
+        });
+
+        // 初始化树形视图
+        function initTreeView() {
+            treeVisualizer = new TreeVisualizer('fileTreeView', {
+                width: document.getElementById('fileTreeView').offsetWidth,
+                height: 600
+            });
+            treeVisualizer.init(KGData.fileStructure);
+        }
+
+        // 初始化旭日图
+        function initSunburstView() {
+            sunburstVisualizer = new SunburstVisualizer('fileSunburstView', {
+                width: 600,
+                height: 600
+            });
+            sunburstVisualizer.init(KGData.fileStructure);
+        }
+
+        // 初始化矩形树图
+        function initTreemapView() {
+            const chartManager = new ChartManager();
+            chartManager.createTreemap('fileTreemapView', KGData.fileStructure);
+        }
+
+        // 切换视图
+        function switchView(view, event) {
+            currentView = view;
+
+            // Update buttons
+            document.querySelectorAll('.view-mode-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            const btn = event.target.closest('.view-mode-btn');
+            if (btn) btn.classList.add('active');
+            
+            // Hide all views
+            document.getElementById('fileTreeView').style.display = 'none';
+            document.getElementById('fileSunburstView').style.display = 'none';
+            document.getElementById('fileTreemapView').style.display = 'none';
+            
+            // Show selected view
+            if (view === 'tree') {
+                document.getElementById('fileTreeView').style.display = 'block';
+                if (!treeVisualizer) initTreeView();
+            } else if (view === 'sunburst') {
+                document.getElementById('fileSunburstView').style.display = 'block';
+                if (!sunburstVisualizer) initSunburstView();
+            } else if (view === 'treemap') {
+                document.getElementById('fileTreemapView').style.display = 'block';
+                initTreemapView();
+            }
+        }
+
+        // 展开全部
+        function expandAll() {
+            if (treeVisualizer && currentView === 'tree') {
+                function expand(d) {
+                    if (d._children) {
+                        d.children = d._children;
+                        d._children = null;
+                    }
+                    if (d.children) {
+                        d.children.forEach(expand);
+                    }
+                }
+                expand(treeVisualizer.root);
+                treeVisualizer.update(treeVisualizer.root);
+            }
+        }
+
+        // 折叠全部
+        function collapseAll() {
+            if (treeVisualizer && currentView === 'tree') {
+                function collapse(d) {
+                    if (d.children) {
+                        d._children = d.children;
+                        d._children.forEach(collapse);
+                        d.children = null;
+                    }
+                }
+                collapse(treeVisualizer.root);
+                treeVisualizer.update(treeVisualizer.root);
+            }
+        }
+
+        // 处理窗口大小变化
+        window.addEventListener('resize', () => {
+            if (treeVisualizer && currentView === 'tree') {
+                treeVisualizer.options.width = document.getElementById('fileTreeView').offsetWidth;
+                treeVisualizer.init(KGData.fileStructure);
+            }
+        });
+    </script>
+</body>
+</html>

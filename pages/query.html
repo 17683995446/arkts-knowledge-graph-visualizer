@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自然语言查询 - ArkTS知识图谱</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+    <script src="../libs/vis-network.min.js"></script>
+    <script src="../libs/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/sql.min.js"></script>
+    <style>
+        .main-content > .top-bar { min-height: auto; padding: 8px 24px; }
+        .main-content { overflow-y: auto !important; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+    <!-- 侧边栏导航 -->
+    <nav class="sidebar" aria-label="主导航">
+        <div class="sidebar-header">
+            <div class="logo">
+                <i class="fas fa-project-diagram"></i>
+                <span>ArkTS知识图谱</span>
+            </div>
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <a href="../index.html" class="nav-link">
+                    <i class="fas fa-home"></i>
+                    <span>项目概览</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="file-structure.html" class="nav-link">
+                    <i class="fas fa-folder-tree"></i>
+                    <span>文件结构</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="class-hierarchy.html" class="nav-link">
+                    <i class="fas fa-sitemap"></i>
+                    <span>类继承关系</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="function-calls.html" class="nav-link">
+                    <i class="fas fa-project-diagram"></i>
+                    <span>函数调用</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="module-deps.html" class="nav-link">
+                    <i class="fas fa-cubes"></i>
+                    <span>模块依赖</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="statistics.html" class="nav-link">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>代码统计</span>
+                </a>
+            </li>
+            <li class="nav-item active">
+                <a href="query.html" class="nav-link">
+                    <i class="fas fa-search"></i>
+                    <span>自然语言查询</span>
+                </a>
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="project-info">
+                <span class="project-name">HarmonyOS Project</span>
+                <span class="project-version">v1.0.0</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <!-- 顶部栏 -->
+        <header class="top-bar">
+            <h1 class="page-title">
+                <i class="fas fa-search"></i>
+                自然语言查询
+            </h1>
+            <div class="top-bar-actions">
+                <button class="btn btn-secondary" onclick="showHelp()">
+                    <i class="fas fa-question-circle"></i>
+                    帮助
+                </button>
+                <button class="btn btn-primary" onclick="exportResults()">
+                    <i class="fas fa-download"></i>
+                    导出结果
+                </button>
+            </div>
+        </header>
+
+        <!-- 查询区域 -->
+        <section class="query-section">
+            <div class="query-container">
+                <div class="query-input-wrapper">
+                    <div class="query-icon">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <input type="text" 
+                           class="query-input" 
+                           id="queryInput"
+                           placeholder="输入自然语言查询，例如：找出所有继承自BaseView的类..."
+                           autocomplete="off"
+                           aria-label="查询输入">
+                    <button class="query-submit" onclick="executeQuery()">
+                        <i class="fas fa-paper-plane"></i>
+                        查询
+                    </button>
+                </div>
+                
+                <!-- 快速查询标签 -->
+                <div class="quick-queries">
+                    <span class="quick-label">快速查询：</span>
+                    <button class="quick-tag" onclick="setQuery('找出所有未被调用的函数')">
+                        <i class="fas fa-ghost"></i> 未使用函数
+                    </button>
+                    <button class="quick-tag" onclick="setQuery('查找所有循环依赖的模块')">
+                        <i class="fas fa-sync-alt"></i> 循环依赖
+                    </button>
+                    <button class="quick-tag" onclick="setQuery('显示代码量最大的10个文件')">
+                        <i class="fas fa-file-code"></i> 大文件
+                    </button>
+                    <button class="quick-tag" onclick="setQuery('找出所有TODO注释')">
+                        <i class="fas fa-clipboard-list"></i> TODO列表
+                    </button>
+                    <button class="quick-tag" onclick="setQuery('分析哪个模块最复杂')">
+                        <i class="fas fa-brain"></i> 复杂度分析
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 查询历史 -->
+        <section class="history-section" id="historySection">
+            <div class="section-header">
+                <h3><i class="fas fa-history"></i> 查询历史</h3>
+                <button class="btn btn-sm btn-text" onclick="clearHistory()">
+                    <i class="fas fa-trash"></i> 清空
+                </button>
+            </div>
+            <div class="history-list" id="historyList">
+                <!-- 动态生成 -->
+            </div>
+        </section>
+
+        <!-- 查询结果区域 -->
+        <section class="results-section" id="resultsSection" style="display: none;">
+            <!-- SQL展示 -->
+            <div class="result-panel sql-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-database"></i> 生成的SQL</h3>
+                    <div class="panel-actions">
+                        <button class="btn btn-sm btn-text" onclick="copySQL()">
+                            <i class="fas fa-copy"></i> 复制
+                        </button>
+                        <button class="btn btn-sm btn-text" onclick="toggleSQL()">
+                            <i class="fas fa-chevron-up" id="sqlToggleIcon"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content" id="sqlContent">
+                    <pre><code class="language-sql" id="sqlCode"></code></pre>
+                </div>
+            </div>
+
+            <!-- 结果表格 -->
+            <div class="result-panel data-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-table"></i> 查询结果</h3>
+                    <div class="panel-actions">
+                        <span class="result-count" id="resultCount"></span>
+                        <button class="btn btn-sm btn-secondary" onclick="exportCSV()">
+                            <i class="fas fa-file-csv"></i> 导出CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div class="table-wrapper">
+                        <table class="data-table" id="resultTable">
+                            <thead id="tableHead"></thead>
+                            <tbody id="tableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 可视化结果 -->
+            <div class="result-panel viz-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-project-diagram"></i> 可视化结果</h3>
+                    <div class="panel-actions">
+                        <button class="btn btn-sm btn-text" onclick="toggleVizMode('graph')">
+                            <i class="fas fa-project-diagram"></i> 图谱
+                        </button>
+                        <button class="btn btn-sm btn-text" onclick="toggleVizMode('chart')">
+                            <i class="fas fa-chart-bar"></i> 图表
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div id="vizContainer" class="viz-container"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 示例查询 -->
+        <section class="examples-section" id="examplesSection">
+            <div class="section-header">
+                <h3><i class="fas fa-lightbulb"></i> 示例查询</h3>
+            </div>
+            <div class="examples-grid">
+                <div class="example-card" onclick="setQuery('查找所有公共API函数')">
+                    <div class="example-icon">
+                        <i class="fas fa-globe"></i>
+                    </div>
+                    <h4>API分析</h4>
+                    <p>查找所有公共API函数</p>
+                    <code>SELECT * FROM functions WHERE is_export = 1</code>
+                </div>
+                <div class="example-card" onclick="setQuery('显示继承层次最深的类')">
+                    <div class="example-icon">
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                    <h4>继承分析</h4>
+                    <p>显示继承层次最深的类</p>
+                    <code>WITH RECURSIVE inheritance_depth...</code>
+                </div>
+                <div class="example-card" onclick="setQuery('找出调用次数最多的函数')">
+                    <div class="example-icon">
+                        <i class="fas fa-fire"></i>
+                    </div>
+                    <h4>热点函数</h4>
+                    <p>找出调用次数最多的函数</p>
+                    <code>SELECT callee_id, COUNT(*)...</code>
+                </div>
+                <div class="example-card" onclick="setQuery('分析模块之间的耦合度')">
+                    <div class="example-icon">
+                        <i class="fas fa-link"></i>
+                    </div>
+                    <h4>耦合分析</h4>
+                    <p>分析模块之间的耦合度</p>
+                    <code>SELECT source_module...</code>
+                </div>
+                <div class="example-card" onclick="setQuery('查找所有包含SQL注入风险的代码')">
+                    <div class="example-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h4>安全扫描</h4>
+                    <p>查找潜在安全风险</p>
+                    <code>SELECT * FROM functions...</code>
+                </div>
+                <div class="example-card" onclick="setQuery('显示最近修改的文件')">
+                    <div class="example-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <h4>变更追踪</h4>
+                    <p>显示最近修改的文件</p>
+                    <code>SELECT * FROM files...</code>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="../js/data.js"></script>
+    <script src="../js/graph.js"></script>
+    <script src="../js/charts.js"></script>
+    <script>
+        // 查询历史 - 修复Bug #27: 处理localStorage中可能存在的空字符串或其他无效JSON
+        function loadQueryHistory() {
+            try {
+                const stored = localStorage.getItem('kg_query_history');
+                if (!stored || stored.trim() === '') {
+                    return [];
+                }
+                const parsed = JSON.parse(stored);
+                // 确保解析结果是数组
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                console.error('Failed to load query history:', e);
+                // 如果解析失败，清除损坏的数据
+                localStorage.removeItem('kg_query_history');
+                return [];
+            }
+        }
+        let queryHistory = loadQueryHistory();
+        let currentResults = null;
+        let currentVizMode = 'graph';
+        let queryNetwork = null;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            renderHistory();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            const input = document.getElementById('queryInput');
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    executeQuery();
+                }
+            });
+        }
+
+        function setQuery(query) {
+            document.getElementById('queryInput').value = query;
+            executeQuery();
+        }
+
+        function executeQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) {
+                showError('请输入查询内容');
+                return;
+            }
+
+            // 添加到历史
+            addToHistory(query);
+
+            // 模拟查询处理
+            showLoading();
+            
+            setTimeout(() => {
+                const result = processQuery(query);
+                displayResults(result);
+                hideLoading();
+            }, 1500);
+        }
+
+        function processQuery(query) {
+            // 模拟自然语言到SQL的转换
+            const sql = generateSQL(query);
+            const data = generateMockResults(query);
+            
+            return {
+                query: query,
+                sql: sql,
+                data: data,
+                vizData: generateVizData(query, data)
+            };
+        }
+
+        function generateSQL(query) {
+            // 模拟SQL生成
+            const lowerQuery = query.toLowerCase();
+            
+            if (lowerQuery.includes('继承') || lowerQuery.includes('extends')) {
+                return `-- 自然语言: ${query}
+SELECT 
+    c.name AS class_name,
+    c.file_path,
+    c.line_start,
+    p.name AS parent_class
+FROM classes c
+LEFT JOIN classes p ON c.parent_id = p.id
+WHERE c.parent_id IS NOT NULL
+ORDER BY c.name;`;
+            }
+            
+            if (lowerQuery.includes('调用') || lowerQuery.includes('call')) {
+                return `-- 自然语言: ${query}
+SELECT 
+    f.name AS function_name,
+    f.file_path,
+    COUNT(fc.callee_id) AS call_count
+FROM functions f
+LEFT JOIN function_calls fc ON f.id = fc.caller_id
+GROUP BY f.id
+ORDER BY call_count DESC
+LIMIT 20;`;
+            }
+            
+            if (lowerQuery.includes('文件') || lowerQuery.includes('file')) {
+                return `-- 自然语言: ${query}
+SELECT 
+    path,
+    line_count,
+    code_lines,
+    comment_lines,
+    ROUND(comment_lines * 100.0 / line_count, 2) AS comment_ratio
+FROM files
+ORDER BY line_count DESC
+LIMIT 10;`;
+            }
+            
+            return `-- 自然语言: ${query}
+SELECT 
+    name,
+    file_path,
+    line_start,
+    line_end,
+    line_count
+FROM functions
+WHERE name LIKE '%${query}%'
+ORDER BY line_count DESC
+LIMIT 50;`;
+        }
+
+        function generateMockResults(query) {
+            const lowerQuery = query.toLowerCase();
+            
+            if (lowerQuery.includes('继承')) {
+                return [
+                    { class_name: 'ButtonComponent', file_path: 'src/components/Button.ets', line_start: 15, parent_class: 'BaseComponent' },
+                    { class_name: 'InputComponent', file_path: 'src/components/Input.ets', line_start: 20, parent_class: 'BaseComponent' },
+                    { class_name: 'ListView', file_path: 'src/views/ListView.ets', line_start: 10, parent_class: 'BaseView' },
+                    { class_name: 'GridView', file_path: 'src/views/GridView.ets', line_start: 12, parent_class: 'BaseView' },
+                    { class_name: 'CustomDialog', file_path: 'src/dialogs/CustomDialog.ets', line_start: 8, parent_class: 'BaseDialog' }
+                ];
+            }
+            
+            if (lowerQuery.includes('调用')) {
+                return [
+                    { function_name: 'render()', file_path: 'src/core/Renderer.ets', call_count: 156 },
+                    { function_name: 'updateState()', file_path: 'src/core/State.ets', call_count: 134 },
+                    { function_name: 'handleEvent()', file_path: 'src/core/EventBus.ets', call_count: 128 },
+                    { function_name: 'fetchData()', file_path: 'src/api/Client.ets', call_count: 98 },
+                    { function_name: 'validate()', file_path: 'src/utils/Validator.ets', call_count: 87 }
+                ];
+            }
+            
+            if (lowerQuery.includes('文件')) {
+                return [
+                    { path: 'src/core/Engine.ets', line_count: 2847, code_lines: 2456, comment_lines: 391, comment_ratio: 13.73 },
+                    { path: 'src/components/ComplexComponent.ets', line_count: 2156, code_lines: 1890, comment_lines: 266, comment_ratio: 12.34 },
+                    { path: 'src/views/MainView.ets', line_count: 1890, code_lines: 1623, comment_lines: 267, comment_ratio: 14.13 },
+                    { path: 'src/api/Service.ets', line_count: 1654, code_lines: 1421, comment_lines: 233, comment_ratio: 14.09 },
+                    { path: 'src/utils/Helpers.ets', line_count: 1423, code_lines: 1234, comment_lines: 189, comment_ratio: 13.28 }
+                ];
+            }
+            
+            return [
+                { name: 'processData', file_path: 'src/utils/DataProcessor.ets', line_start: 45, line_end: 89, line_count: 44 },
+                { name: 'formatOutput', file_path: 'src/utils/Formatter.ets', line_start: 23, line_end: 67, line_count: 44 },
+                { name: 'validateInput', file_path: 'src/utils/Validator.ets', line_start: 12, line_end: 56, line_count: 44 },
+                { name: 'calculateMetrics', file_path: 'src/analytics/Metrics.ets', line_start: 78, line_end: 121, line_count: 43 },
+                { name: 'transformData', file_path: 'src/utils/Transformer.ets', line_start: 34, line_end: 76, line_count: 42 }
+            ];
+        }
+
+        function generateVizData(query, data) {
+            // 根据查询生成可视化数据
+            const nodes = [];
+            const edges = [];
+            
+            data.forEach((item, index) => {
+                nodes.push({
+                    id: index,
+                    label: item.name || item.class_name || item.function_name || item.path,
+                    group: index % 3
+                });
+            });
+            
+            // 添加一些随机边
+            for (let i = 0; i < nodes.length - 1; i++) {
+                edges.push({
+                    from: i,
+                    to: i + 1
+                });
+            }
+            
+            return { nodes, edges };
+        }
+
+        function displayResults(result) {
+            currentResults = result;
+            
+            // 显示结果区域
+            document.getElementById('resultsSection').style.display = 'block';
+            document.getElementById('examplesSection').style.display = 'none';
+            
+            // 显示SQL
+            document.getElementById('sqlCode').textContent = result.sql;
+            hljs.highlightElement(document.getElementById('sqlCode'));
+            
+            // 显示结果数量
+            document.getElementById('resultCount').textContent = `${result.data.length} 条结果`;
+            
+            // 渲染表格
+            renderTable(result.data);
+            
+            // 渲染可视化
+            renderVisualization(result.vizData);
+            
+            // 滚动到结果
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function renderTable(data) {
+            if (!data || data.length === 0) return;
+            
+            const columns = Object.keys(data[0]);
+            
+            // 表头 - Bug #28修复: 对列名也进行HTML转义防止XSS
+            const thead = document.getElementById('tableHead');
+            thead.innerHTML = `
+                <tr>
+                    ${columns.map(col => `<th>${escapeHtml(col)}</th>`).join('')}
+                </tr>
+            `;
+            
+            // 表体 - Bug #28修复: 对单元格值进行HTML转义防止XSS
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = data.map(row => `
+                <tr>
+                    ${columns.map(col => `<td>${escapeHtml(String(row[col] ?? ''))}</td>`).join('')}
+                </tr>
+            `).join('');
+        }
+
+        function renderVisualization(vizData) {
+            const container = document.getElementById('vizContainer');
+            container.innerHTML = '';
+
+            if (queryNetwork) {
+                queryNetwork.destroy();
+                queryNetwork = null;
+            }
+
+            if (currentVizMode === 'graph') {
+                const options = {
+                    nodes: {
+                        shape: 'dot',
+                        size: 20,
+                        font: { color: '#e0e0e0' }
+                    },
+                    edges: {
+                        color: { color: '#4a9eff', opacity: 0.6 },
+                        smooth: { type: 'continuous' }
+                    },
+                    physics: {
+                        stabilization: false,
+                        barnesHut: {
+                            gravitationalConstant: -2000,
+                            springConstant: 0.04
+                        }
+                    }
+                };
+
+                queryNetwork = new vis.Network(container, vizData, options);
+            } else {
+                // 图表模式
+                const chartData = vizData.nodes.map((n, i) => ({
+                    label: n.label,
+                    value: Math.random() * 100
+                }));
+                
+                const chartManager = new ChartManager();
+                chartManager.createBarChart('vizContainer', chartData, {
+                    height: 400,
+                    margin: { top: 20, right: 20, bottom: 100, left: 60 }
+                });
+            }
+        }
+
+        function toggleVizMode(mode) {
+            currentVizMode = mode;
+            if (currentResults) {
+                renderVisualization(currentResults.vizData);
+            }
+        }
+
+        function addToHistory(query) {
+            if (!query || typeof query !== 'string') {
+                console.warn('Invalid query passed to addToHistory:', query);
+                return;
+            }
+            // 移除重复
+            queryHistory = queryHistory.filter(q => q !== query);
+            // 添加到开头
+            queryHistory.unshift(query);
+            // 限制数量
+            queryHistory = queryHistory.slice(0, 10);
+            // 保存 - 添加错误处理 (Bug #27修复)
+            try {
+                localStorage.setItem('kg_query_history', JSON.stringify(queryHistory));
+            } catch (e) {
+                console.error('Failed to save query history:', e);
+                // 可能是存储空间不足，尝试清除旧数据
+                if (e.name === 'QuotaExceededError') {
+                    queryHistory = queryHistory.slice(0, 5); // 只保留最近的5条
+                    try {
+                        localStorage.setItem('kg_query_history', JSON.stringify(queryHistory));
+                    } catch (e2) {
+                        console.error('Still failed after reducing history size:', e2);
+                    }
+                }
+            }
+            renderHistory();
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('historyList');
+
+            if (queryHistory.length === 0) {
+                document.getElementById('historySection').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('historySection').style.display = 'block';
+            // Bug #28修复: 使用事件委托替代内联onclick防止XSS注入
+            container.innerHTML = queryHistory.map((q, index) => `
+                <div class="history-item" data-query-index="${index}">
+                    <i class="fas fa-history"></i>
+                    <span>${escapeHtml(q)}</span>
+                </div>
+            `).join('');
+
+            // 使用事件委托处理点击
+            container.onclick = function(e) {
+                const item = e.target.closest('.history-item');
+                if (item) {
+                    const idx = parseInt(item.dataset.queryIndex, 10);
+                    if (!isNaN(idx) && queryHistory[idx]) {
+                        setQuery(queryHistory[idx]);
+                    }
+                }
+            };
+        }
+
+        function clearHistory() {
+            queryHistory = [];
+            try {
+                localStorage.removeItem('kg_query_history');
+            } catch (e) {
+                console.error('Failed to clear query history:', e);
+            }
+            renderHistory();
+        }
+
+        function showLoading() {
+            const btn = document.querySelector('.query-submit');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 查询中...';
+            btn.disabled = true;
+        }
+
+        function hideLoading() {
+            const btn = document.querySelector('.query-submit');
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> 查询';
+            btn.disabled = false;
+        }
+
+        function showError(message) {
+            // Bug #28修复: 使用textContent替代innerHTML防止XSS
+            const toast = document.createElement('div');
+            toast.className = 'error-toast';
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-exclamation-circle';
+            toast.appendChild(icon);
+            toast.appendChild(document.createTextNode(' ' + message));
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #ef4444;
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 14px;
+                animation: slideIn 0.3s ease;
+            `;
+            document.body.appendChild(toast);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function copySQL() {
+            const sql = document.getElementById('sqlCode').textContent;
+            navigator.clipboard.writeText(sql).then(() => {
+                alert('SQL已复制到剪贴板');
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('复制失败，请手动复制');
+            });
+        }
+
+        function toggleSQL() {
+            const content = document.getElementById('sqlContent');
+            const icon = document.getElementById('sqlToggleIcon');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.className = 'fas fa-chevron-up';
+            } else {
+                content.style.display = 'none';
+                icon.className = 'fas fa-chevron-down';
+            }
+        }
+
+        function exportCSV() {
+            if (!currentResults || !currentResults.data) return;
+            
+            const data = currentResults.data;
+            const columns = Object.keys(data[0]);
+            
+            let csv = columns.join(',') + '\n';
+            csv += data.map(row => 
+                columns.map(col => `"${row[col]}"`).join(',')
+            ).join('\n');
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'query_results.csv';
+            a.click();
+            // Bug #33修复: 释放Object URL防止内存泄漏
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function exportResults() {
+            if (!currentResults) {
+                alert('请先执行查询');
+                return;
+            }
+            exportCSV();
+        }
+
+        function showHelp() {
+            document.getElementById('helpModal').style.display = 'flex';
+        }
+
+        function closeHelp() {
+            document.getElementById('helpModal').style.display = 'none';
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('helpModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
+    </script>
+    </div>
+
+    <!-- 帮助模态框 -->
+    <div class="modal" id="helpModal" role="dialog" aria-modal="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-question-circle"></i> 查询帮助</h2>
+                <button class="modal-close" onclick="closeHelp()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="help-section">
+                    <h3>支持的查询类型</h3>
+                    <ul>
+                        <li><strong>实体查询</strong> - 查找类、函数、文件等</li>
+                        <li><strong>关系查询</strong> - 分析调用、继承、依赖关系</li>
+                        <li><strong>统计查询</strong> - 代码量、复杂度等统计</li>
+                        <li><strong>模式查询</strong> - 查找代码模式、反模式</li>
+                    </ul>
+                </div>
+                <div class="help-section">
+                    <h3>查询技巧</h3>
+                    <ul>
+                        <li>使用具体的关键词，如"继承自BaseView的类"</li>
+                        <li>可以指定数量，如"前10个最复杂的函数"</li>
+                        <li>支持条件组合，如"公共且未被调用的函数"</li>
+                    </ul>
+                </div>
+                <div class="help-section">
+                    <h3>数据库Schema</h3>
+                    <div class="schema-list">
+                        <div class="schema-item">
+                            <code>files</code> - 文件信息
+                        </div>
+                        <div class="schema-item">
+                            <code>classes</code> - 类定义
+                        </div>
+                        <div class="schema-item">
+                            <code>functions</code> - 函数定义
+                        </div>
+                        <div class="schema-item">
+                            <code>class_inheritance</code> - 类继承关系
+                        </div>
+                        <div class="schema-item">
+                            <code>function_calls</code> - 函数调用关系
+                        </div>
+                        <div class="schema-item">
+                            <code>module_deps</code> - 模块依赖关系
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

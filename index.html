@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArkTS 知识图谱可视化平台</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <script src="libs/d3.v7.min.js"></script>
+    <script src="libs/vis-network.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边导航栏 -->
+        <nav class="sidebar" aria-label="主导航">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-project-diagram"></i>
+                    <span>ArkTS KG</span>
+                </div>
+                <div class="project-selector">
+                    <select id="projectSelect">
+                        <option value="demo">示例项目</option>
+                        <option value="project1">HarmonyOS App</option>
+                        <option value="project2">ArkUI Components</option>
+                    </select>
+                </div>
+            </div>
+            
+            <ul class="nav-menu">
+                <li class="nav-item active">
+                    <a href="index.html" class="nav-link">
+                        <i class="fas fa-home"></i>
+                        <span>项目概览</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="pages/file-structure.html" class="nav-link">
+                        <i class="fas fa-folder-tree"></i>
+                        <span>文件结构图谱</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="pages/class-hierarchy.html" class="nav-link">
+                        <i class="fas fa-sitemap"></i>
+                        <span>类继承关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="pages/function-calls.html" class="nav-link">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>函数调用关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="pages/module-deps.html" class="nav-link">
+                        <i class="fas fa-cubes"></i>
+                        <span>模块依赖关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="pages/statistics.html" class="nav-link">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>代码统计分析</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="pages/query.html" class="nav-link">
+                        <i class="fas fa-search"></i>
+                        <span>自然语言查询</span>
+                    </a>
+                </li>
+            </ul>
+            
+            <div class="sidebar-footer">
+                <div class="build-info">
+                    <i class="fas fa-info-circle"></i>
+                    <span>最后构建: 2分钟前</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 顶部栏 -->
+            <header class="top-bar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="搜索类、函数、文件..." id="globalSearch" aria-label="全局搜索">
+                </div>
+                <div class="top-bar-actions">
+                    <button class="btn btn-icon" title="重新构建">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="btn btn-icon" title="导出数据">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button class="btn btn-icon" title="设置">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- 仪表盘内容 -->
+            <div class="dashboard-content">
+                <!-- 统计卡片 -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon files">
+                            <i class="fas fa-file-code"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalFiles">1,247</h3>
+                            <p>源文件</p>
+                        </div>
+                        <div class="stat-trend up">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>+12</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon classes">
+                            <i class="fas fa-cube"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalClasses">386</h3>
+                            <p>类/组件</p>
+                        </div>
+                        <div class="stat-trend up">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>+5</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon functions">
+                            <i class="fas fa-function"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalFunctions">2,156</h3>
+                            <p>函数/方法</p>
+                        </div>
+                        <div class="stat-trend up">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>+28</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon lines">
+                            <i class="fas fa-code"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalLines">156,432</h3>
+                            <p>代码行数</p>
+                        </div>
+                        <div class="stat-trend up">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>+1.2k</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 主图表区域 -->
+                <div class="charts-grid">
+                    <!-- 项目结构概览图 -->
+                    <div class="chart-card large">
+                        <div class="chart-header">
+                            <h3><i class="fas fa-project-diagram"></i> 项目结构概览</h3>
+                            <div class="chart-actions">
+                                <button class="btn btn-sm" onclick="resetZoom()">
+                                    <i class="fas fa-compress-arrows-alt"></i> 重置视图
+                                </button>
+                                <button class="btn btn-sm" onclick="togglePhysics()">
+                                    <i class="fas fa-pause"></i> 暂停物理
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chart-body">
+                            <div id="overviewGraph" class="graph-container"></div>
+                            <div class="graph-legend">
+                                <div class="legend-item">
+                                    <span class="legend-color" style="background: #4CAF50;"></span>
+                                    <span>组件类</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-color" style="background: #2196F3;"></span>
+                                    <span>工具类</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-color" style="background: #FF9800;"></span>
+                                    <span>接口</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-color" style="background: #9C27B0;"></span>
+                                    <span>枚举</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 代码分布饼图 -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3><i class="fas fa-chart-pie"></i> 文件类型分布</h3>
+                        </div>
+                        <div class="chart-body">
+                            <div id="fileTypeChart" class="chart-container"></div>
+                        </div>
+                    </div>
+
+                    <!-- 代码行数趋势 -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3><i class="fas fa-chart-line"></i> 代码增长趋势</h3>
+                        </div>
+                        <div class="chart-body">
+                            <div id="codeTrendChart" class="chart-container"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 最近活动和热门查询 -->
+                <div class="bottom-grid">
+                    <div class="info-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-history"></i> 最近变更</h3>
+                            <a href="#" class="view-all">查看全部</a>
+                        </div>
+                        <div class="activity-list">
+                            <div class="activity-item">
+                                <div class="activity-icon add">
+                                    <i class="fas fa-plus"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <p>新增组件 <code>SmartButton</code></p>
+                                    <span class="activity-time">2分钟前</span>
+                                </div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="activity-icon modify">
+                                    <i class="fas fa-edit"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <p>修改 <code>DataManager.fetchData()</code></p>
+                                    <span class="activity-time">15分钟前</span>
+                                </div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="activity-icon delete">
+                                    <i class="fas fa-trash"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <p>删除废弃工具类 <code>OldUtils</code></p>
+                                    <span class="activity-time">1小时前</span>
+                                </div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="activity-icon add">
+                                    <i class="fas fa-plus"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <p>新增接口 <code>IDataProvider</code></p>
+                                    <span class="activity-time">2小时前</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-fire"></i> 热门查询</h3>
+                        </div>
+                        <div class="query-list">
+                            <div class="query-item" onclick="runQuery(this)">
+                                <i class="fas fa-search"></i>
+                                <span>查找所有按钮组件</span>
+                                <span class="query-count">128次</span>
+                            </div>
+                            <div class="query-item" onclick="runQuery(this)">
+                                <i class="fas fa-search"></i>
+                                <span>显示异步函数调用链</span>
+                                <span class="query-count">86次</span>
+                            </div>
+                            <div class="query-item" onclick="runQuery(this)">
+                                <i class="fas fa-search"></i>
+                                <span>分析模块依赖关系</span>
+                                <span class="query-count">64次</span>
+                            </div>
+                            <div class="query-item" onclick="runQuery(this)">
+                                <i class="fas fa-search"></i>
+                                <span>查找未使用的函数</span>
+                                <span class="query-count">52次</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-exclamation-triangle"></i> 代码质量</h3>
+                        </div>
+                        <div class="quality-metrics">
+                            <div class="quality-item">
+                                <div class="quality-label">
+                                    <span>代码覆盖率</span>
+                                    <span class="quality-value good">78%</span>
+                                </div>
+                                <div class="quality-bar">
+                                    <div class="quality-fill" style="width: 78%; background: #4CAF50;"></div>
+                                </div>
+                            </div>
+                            <div class="quality-item">
+                                <div class="quality-label">
+                                    <span>重复代码</span>
+                                    <span class="quality-value warning">12%</span>
+                                </div>
+                                <div class="quality-bar">
+                                    <div class="quality-fill" style="width: 12%; background: #FF9800;"></div>
+                                </div>
+                            </div>
+                            <div class="quality-item">
+                                <div class="quality-label">
+                                    <span>复杂度过高</span>
+                                    <span class="quality-value danger">5个</span>
+                                </div>
+                                <div class="quality-bar">
+                                    <div class="quality-fill" style="width: 15%; background: #f44336;"></div>
+                                </div>
+                            </div>
+                            <div class="quality-item">
+                                <div class="quality-label">
+                                    <span>文档覆盖率</span>
+                                    <span class="quality-value good">85%</span>
+                                </div>
+                                <div class="quality-bar">
+                                    <div class="quality-fill" style="width: 85%; background: #4CAF50;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 详情弹窗 -->
+    <div id="detailModal" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">节点详情</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- 动态内容 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="js/data.js"></script>
+    <script src="js/graph.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    initDashboard();
+                });
+            });
+        });
+    </script>
+</body>
+</html>

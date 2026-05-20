@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代码统计分析 - ArkTS Knowledge Graph</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/dashboard.css">
+    <script src="../libs/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .main-content > .top-bar { min-height: auto; padding: 8px 24px; }
+        .main-content > .dashboard-content { padding: 16px; flex: 1; overflow-y: auto; }
+
+        .stats-content {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        
+        .stats-card {
+            background: var(--bg-card);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+        
+        .stats-card.full-width {
+            grid-column: span 2;
+        }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+        
+        .card-header h3 {
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .card-header h3 i {
+            color: var(--primary-color);
+        }
+        
+        .card-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .card-body {
+            padding: 20px;
+        }
+        
+        .chart-container {
+            width: 100%;
+            height: 300px;
+        }
+        
+        .chart-container.large {
+            height: 400px;
+        }
+        
+        .stats-grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .stat-tile {
+            background: var(--bg-secondary);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+        
+        .stat-tile-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 12px;
+            font-size: 1.25rem;
+        }
+        
+        .stat-tile-icon.blue {
+            background: rgba(37, 99, 235, 0.15);
+            color: #3b82f6;
+        }
+        
+        .stat-tile-icon.green {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+        }
+        
+        .stat-tile-icon.orange {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+        }
+        
+        .stat-tile-icon.purple {
+            background: rgba(139, 92, 246, 0.15);
+            color: #8b5cf6;
+        }
+        
+        .stat-tile-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        
+        .stat-tile-label {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+        
+        .complexity-legend {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 16px;
+        }
+        
+        .complexity-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+        
+        .complexity-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .complexity-dot.low { background: #10b981; }
+        .complexity-dot.medium { background: #f59e0b; }
+        .complexity-dot.high { background: #ef4444; }
+        .complexity-dot.very-high { background: #7c2d12; }
+        
+        .file-list {
+            list-style: none;
+        }
+        
+        .file-list-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .file-list-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-rank {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-right: 12px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+        
+        .file-rank.top {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-path {
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            font-family: 'Fira Code', monospace;
+            margin-bottom: 2px;
+        }
+        
+        .file-meta {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .file-stats {
+            text-align: right;
+        }
+        
+        .file-lines {
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        
+        .file-complexity {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.6875rem;
+            margin-top: 4px;
+        }
+        
+        .file-complexity.low {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+        }
+        
+        .file-complexity.medium {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+        }
+        
+        .file-complexity.high {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+        
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        .breadcrumb a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        
+        .breadcrumb-separator {
+            color: var(--text-muted);
+        }
+        
+        .time-selector {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .time-btn {
+            padding: 4px 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: var(--transition);
+        }
+        
+        .time-btn:hover,
+        .time-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边导航栏 -->
+        <nav class="sidebar" aria-label="主导航">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-project-diagram"></i>
+                    <span>ArkTS KG</span>
+                </div>
+            </div>
+            
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="../index.html" class="nav-link">
+                        <i class="fas fa-home"></i>
+                        <span>项目概览</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="file-structure.html" class="nav-link">
+                        <i class="fas fa-folder-tree"></i>
+                        <span>文件结构图谱</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="class-hierarchy.html" class="nav-link">
+                        <i class="fas fa-sitemap"></i>
+                        <span>类继承关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="function-calls.html" class="nav-link">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>函数调用关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="module-deps.html" class="nav-link">
+                        <i class="fas fa-cubes"></i>
+                        <span>模块依赖关系</span>
+                    </a>
+                </li>
+                <li class="nav-item active">
+                    <a href="statistics.html" class="nav-link">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>代码统计分析</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="query.html" class="nav-link">
+                        <i class="fas fa-search"></i>
+                        <span>自然语言查询</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="breadcrumb">
+                    <a href="../index.html">首页</a>
+                    <span class="breadcrumb-separator">/</span>
+                    <span>代码统计分析</span>
+                </div>
+                <div class="top-bar-actions">
+                    <button class="btn btn-icon" title="导出报告">
+                        <i class="fas fa-file-export"></i>
+                    </button>
+                    <button class="btn btn-icon" title="刷新">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="dashboard-content">
+                <div class="stats-content">
+                    <!-- 概览统计 -->
+                    <div class="stats-card full-width">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-pie"></i> 代码概览</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="stats-grid-4">
+                                <div class="stat-tile">
+                                    <div class="stat-tile-icon blue">
+                                        <i class="fas fa-file-code"></i>
+                                    </div>
+                                    <div class="stat-tile-value">1,247</div>
+                                    <div class="stat-tile-label">源文件</div>
+                                </div>
+                                <div class="stat-tile">
+                                    <div class="stat-tile-icon green">
+                                        <i class="fas fa-code"></i>
+                                    </div>
+                                    <div class="stat-tile-value">156.4K</div>
+                                    <div class="stat-tile-label">代码行</div>
+                                </div>
+                                <div class="stat-tile">
+                                    <div class="stat-tile-icon orange">
+                                        <i class="fas fa-comment"></i>
+                                    </div>
+                                    <div class="stat-tile-value">23.5K</div>
+                                    <div class="stat-tile-label">注释行</div>
+                                </div>
+                                <div class="stat-tile">
+                                    <div class="stat-tile-icon purple">
+                                        <i class="fas fa-percentage"></i>
+                                    </div>
+                                    <div class="stat-tile-value">15.0%</div>
+                                    <div class="stat-tile-label">注释率</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 语言分布 -->
+                    <div class="stats-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-code-branch"></i> 语言分布</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="languageChart" class="chart-container"></div>
+                        </div>
+                    </div>
+
+                    <!-- 复杂度分布 -->
+                    <div class="stats-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-wave-square"></i> 复杂度分布</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="complexityChart" class="chart-container"></div>
+                            <div class="complexity-legend">
+                                <div class="complexity-item">
+                                    <div class="complexity-dot low"></div>
+                                    <span>低复杂度</span>
+                                </div>
+                                <div class="complexity-item">
+                                    <div class="complexity-dot medium"></div>
+                                    <span>中等</span>
+                                </div>
+                                <div class="complexity-item">
+                                    <div class="complexity-dot high"></div>
+                                    <span>高复杂度</span>
+                                </div>
+                                <div class="complexity-item">
+                                    <div class="complexity-dot very-high"></div>
+                                    <span>极高</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 代码增长趋势 -->
+                    <div class="stats-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-line"></i> 代码增长趋势</h3>
+                            <div class="time-selector">
+                                <button class="time-btn active">7天</button>
+                                <button class="time-btn">30天</button>
+                                <button class="time-btn">90天</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="growthChart" class="chart-container"></div>
+                        </div>
+                    </div>
+
+                    <!-- 最大文件排行 -->
+                    <div class="stats-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-list-ol"></i> 最大文件排行</h3>
+                        </div>
+                        <div class="card-body">
+                            <ul class="file-list">
+                                <li class="file-list-item">
+                                    <div class="file-rank top">1</div>
+                                    <div class="file-info">
+                                        <div class="file-path">src/pages/Home.ets</div>
+                                        <div class="file-meta">组件 · 15个方法</div>
+                                    </div>
+                                    <div class="file-stats">
+                                        <div class="file-lines">312 lines</div>
+                                        <span class="file-complexity medium">中等复杂度</span>
+                                    </div>
+                                </li>
+                                <li class="file-list-item">
+                                    <div class="file-rank top">2</div>
+                                    <div class="file-info">
+                                        <div class="file-path">src/services/DataService.ts</div>
+                                        <div class="file-meta">服务 · 23个方法</div>
+                                    </div>
+                                    <div class="file-stats">
+                                        <div class="file-lines">234 lines</div>
+                                        <span class="file-complexity high">高复杂度</span>
+                                    </div>
+                                </li>
+                                <li class="file-list-item">
+                                    <div class="file-rank top">3</div>
+                                    <div class="file-info">
+                                        <div class="file-path">src/pages/Detail.ets</div>
+                                        <div class="file-meta">页面 · 12个方法</div>
+                                    </div>
+                                    <div class="file-stats">
+                                        <div class="file-lines">245 lines</div>
+                                        <span class="file-complexity medium">中等复杂度</span>
+                                    </div>
+                                </li>
+                                <li class="file-list-item">
+                                    <div class="file-rank">4</div>
+                                    <div class="file-info">
+                                        <div class="file-path">src/components/List.ets</div>
+                                        <div class="file-meta">组件 · 8个方法</div>
+                                    </div>
+                                    <div class="file-stats">
+                                        <div class="file-lines">156 lines</div>
+                                        <span class="file-complexity low">低复杂度</span>
+                                    </div>
+                                </li>
+                                <li class="file-list-item">
+                                    <div class="file-rank">5</div>
+                                    <div class="file-info">
+                                        <div class="file-path">src/pages/Profile.ets</div>
+                                        <div class="file-meta">页面 · 10个方法</div>
+                                    </div>
+                                    <div class="file-stats">
+                                        <div class="file-lines">198 lines</div>
+                                        <span class="file-complexity low">低复杂度</span>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- 提交统计 -->
+                    <div class="stats-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-code-branch"></i> 提交统计</h3>
+                            <div class="time-selector">
+                                <button class="time-btn active">本周</button>
+                                <button class="time-btn">本月</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="commitChart" class="chart-container"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../js/data.js"></script>
+    <script src="../js/charts.js"></script>
+    <script>
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+        });
+
+        function initCharts() {
+            const chartManager = new ChartManager();
+
+            // 语言分布柱状图
+            chartManager.createBarChart('languageChart', [
+                { name: 'ArkTS', value: 85432, color: '#4CAF50' },
+                { name: 'TypeScript', value: 45678, color: '#2196F3' },
+                { name: 'JavaScript', value: 18900, color: '#FF9800' },
+                { name: 'JSON', value: 4200, color: '#9C27B0' },
+                { name: 'CSS', value: 2222, color: '#00BCD4' }
+            ], { height: 260 });
+
+            // 复杂度分布饼图
+            const complexityData = [
+                { type: '低复杂度', count: 1456, color: '#10b981' },
+                { type: '中等', count: 567, color: '#f59e0b' },
+                { type: '高复杂度', count: 89, color: '#ef4444' },
+                { type: '极高', count: 12, color: '#7c2d12' }
+            ];
+            
+            // Create custom complexity chart
+            createComplexityChart('complexityChart', complexityData);
+
+            // 增长趋势图
+            chartManager.createLineChart('growthChart', KGData.codeTrend);
+
+            // 提交统计柱状图
+            chartManager.createBarChart('commitChart', [
+                { name: '周一', value: 12, color: '#3b82f6' },
+                { name: '周二', value: 19, color: '#3b82f6' },
+                { name: '周三', value: 15, color: '#3b82f6' },
+                { name: '周四', value: 25, color: '#3b82f6' },
+                { name: '周五', value: 22, color: '#3b82f6' },
+                { name: '周六', value: 8, color: '#3b82f6' },
+                { name: '周日', value: 5, color: '#3b82f6' }
+            ], { height: 260 });
+        }
+
+        function createComplexityChart(containerId, data) {
+            const container = d3.select(`#${containerId}`);
+            container.selectAll('*').remove();
+
+            const width = container.node().getBoundingClientRect().width;
+            const height = 260;
+            const radius = Math.min(width, height) / 2 - 40;
+
+            const svg = container.append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .append('g')
+                .attr('transform', `translate(${width / 2},${height / 2})`);
+
+            const pie = d3.pie()
+                .value(d => d.count)
+                .sort(null);
+
+            const arc = d3.arc()
+                .innerRadius(radius * 0.5)
+                .outerRadius(radius);
+
+            const arcs = svg.selectAll('arc')
+                .data(pie(data))
+                .enter()
+                .append('g');
+
+            arcs.append('path')
+                .attr('d', arc)
+                .attr('fill', d => d.data.color)
+                .attr('stroke', '#1e293b')
+                .attr('stroke-width', 2);
+
+            // Add labels
+            const labelArc = d3.arc()
+                .innerRadius(radius * 0.7)
+                .outerRadius(radius * 0.7);
+
+            arcs.append('text')
+                .attr('transform', d => `translate(${labelArc.centroid(d)})`)
+                .attr('text-anchor', 'middle')
+                .text(d => d.data.count)
+                .style('fill', '#f1f5f9')
+                .style('font-size', '12px')
+                .style('font-weight', 'bold');
+
+            // Center text
+            const total = data.reduce((sum, d) => sum + d.count, 0);
+            
+            svg.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', '-0.2em')
+                .text(total)
+                .style('font-size', '24px')
+                .style('font-weight', 'bold')
+                .style('fill', '#f1f5f9');
+
+            svg.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', '1.2em')
+                .text('Functions')
+                .style('font-size', '12px')
+                .style('fill', '#94a3b8');
+        }
+
+        // Time selector handlers
+        document.querySelectorAll('.time-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.parentElement.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>类继承关系 - ArkTS Knowledge Graph</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/dashboard.css">
+    <script src="../libs/d3.v7.min.js"></script>
+    <script src="../libs/vis-network.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .main-content > .top-bar { min-height: auto; padding: 8px 24px; }
+        .main-content > .dashboard-content { padding: 16px; flex: 1; overflow: hidden; }
+
+        .visualization-container {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 20px;
+            height: 100%;
+            min-height: 0;
+        }
+        
+        .graph-main {
+            background: var(--bg-card);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .graph-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+        
+        .graph-content {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            min-height: 400px;
+        }
+        
+        #classHierarchyGraph {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .info-panel {
+            background: var(--bg-card);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .panel-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .panel-header h3 {
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        
+        .class-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-box {
+            background: var(--bg-secondary);
+            padding: 16px;
+            border-radius: var(--border-radius);
+            text-align: center;
+        }
+        
+        .stat-box .number {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .stat-box .label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        
+        .class-legend {
+            margin-bottom: 20px;
+        }
+        
+        .class-legend h4 {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            border-radius: var(--border-radius);
+            margin-bottom: 4px;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+        
+        .legend-color.abstract {
+            background: #9C27B0;
+        }
+        
+        .legend-color.class {
+            background: #4CAF50;
+        }
+        
+        .legend-color.component {
+            background: #2196F3;
+        }
+        
+        .legend-color.interface {
+            background: #FF9800;
+        }
+        
+        .legend-color.model {
+            background: #00BCD4;
+        }
+        
+        .class-list {
+            list-style: none;
+        }
+        
+        .class-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: var(--transition);
+            border-left: 3px solid transparent;
+        }
+        
+        .class-item:hover {
+            background: var(--bg-secondary);
+            border-left-color: var(--primary-color);
+        }
+        
+        .class-item i {
+            color: var(--primary-color);
+        }
+        
+        .class-info {
+            flex: 1;
+        }
+        
+        .class-name {
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            font-family: 'Fira Code', monospace;
+        }
+        
+        .class-meta {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .inheritance-badge {
+            background: var(--bg-tertiary);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.6875rem;
+            color: var(--text-secondary);
+        }
+        
+        .search-box-small {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-tertiary);
+            border-radius: var(--border-radius);
+            padding: 8px 12px;
+            margin-bottom: 16px;
+        }
+        
+        .search-box-small input {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            width: 100%;
+        }
+        
+        .search-box-small input:focus {
+            outline: none;
+        }
+        
+        .search-box-small i {
+            color: var(--text-muted);
+        }
+        
+        .view-modes {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .view-mode-btn {
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 0.8125rem;
+            transition: var(--transition);
+        }
+        
+        .view-mode-btn:hover,
+        .view-mode-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        .breadcrumb a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        
+        .breadcrumb-separator {
+            color: var(--text-muted);
+        }
+        
+        /* D3 Tree Styles */
+        .node circle {
+            fill: var(--bg-tertiary);
+            stroke: var(--primary-color);
+            stroke-width: 2px;
+        }
+        
+        .node text {
+            font-size: 11px;
+            fill: var(--text-primary);
+        }
+        
+        .link {
+            fill: none;
+            stroke: var(--border-color);
+            stroke-width: 1.5px;
+        }
+        
+        .node--internal circle {
+            fill: var(--primary-color);
+        }
+        
+        .node--leaf circle {
+            fill: var(--success-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边导航栏 -->
+        <nav class="sidebar" aria-label="主导航">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-project-diagram"></i>
+                    <span>ArkTS KG</span>
+                </div>
+            </div>
+            
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="../index.html" class="nav-link">
+                        <i class="fas fa-home"></i>
+                        <span>项目概览</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="file-structure.html" class="nav-link">
+                        <i class="fas fa-folder-tree"></i>
+                        <span>文件结构图谱</span>
+                    </a>
+                </li>
+                <li class="nav-item active">
+                    <a href="class-hierarchy.html" class="nav-link">
+                        <i class="fas fa-sitemap"></i>
+                        <span>类继承关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="function-calls.html" class="nav-link">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>函数调用关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="module-deps.html" class="nav-link">
+                        <i class="fas fa-cubes"></i>
+                        <span>模块依赖关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="statistics.html" class="nav-link">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>代码统计分析</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="query.html" class="nav-link">
+                        <i class="fas fa-search"></i>
+                        <span>自然语言查询</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="breadcrumb">
+                    <a href="../index.html">首页</a>
+                    <span class="breadcrumb-separator">/</span>
+                    <span>类继承关系</span>
+                </div>
+                <div class="top-bar-actions">
+                    <button class="btn btn-icon" title="刷新">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="btn btn-icon" title="导出图片">
+                        <i class="fas fa-image"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="dashboard-content">
+                <div class="visualization-container">
+                    <!-- 主可视化区域 -->
+                    <div class="graph-main">
+                        <div class="graph-toolbar">
+                            <div class="view-modes">
+                                <button class="view-mode-btn active" onclick="switchView('tree', event)">
+                                    <i class="fas fa-sitemap"></i> 树形图
+                                </button>
+                                <button class="view-mode-btn" onclick="switchView('network', event)">
+                                    <i class="fas fa-project-diagram"></i> 网络图
+                                </button>
+                            </div>
+                            <div style="margin-left: auto;">
+                                <button class="btn btn-sm" onclick="resetZoom()">
+                                    <i class="fas fa-compress-arrows-alt"></i> 重置视图
+                                </button>
+                            </div>
+                        </div>
+                        <div class="graph-content">
+                            <div id="classHierarchyGraph"></div>
+                        </div>
+                    </div>
+
+                    <!-- 信息面板 -->
+                    <div class="info-panel">
+                        <div class="panel-header">
+                            <h3><i class="fas fa-info-circle"></i> 类层次统计</h3>
+                        </div>
+                        <div class="panel-content">
+                            <div class="class-stats">
+                                <div class="stat-box">
+                                    <div class="number">386</div>
+                                    <div class="label">总类数</div>
+                                </div>
+                                <div class="stat-box">
+                                    <div class="number">12</div>
+                                    <div class="label">继承层级</div>
+                                </div>
+                                <div class="stat-box">
+                                    <div class="number">45</div>
+                                    <div class="label">抽象类</div>
+                                </div>
+                                <div class="stat-box">
+                                    <div class="number">28</div>
+                                    <div class="label">接口</div>
+                                </div>
+                            </div>
+
+                            <div class="search-box-small">
+                                <i class="fas fa-search"></i>
+                                <input type="text" placeholder="搜索类名..." id="classSearch" aria-label="搜索类名">
+                            </div>
+
+                            <div class="class-legend">
+                                <h4><i class="fas fa-palette"></i> 图例</h4>
+                                <div class="legend-item">
+                                    <div class="legend-color abstract"></div>
+                                    <span>抽象类</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color class"></div>
+                                    <span>普通类</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color component"></div>
+                                    <span>组件类</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color interface"></div>
+                                    <span>接口</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color model"></div>
+                                    <span>模型类</span>
+                                </div>
+                            </div>
+
+                            <h4 style="margin: 20px 0 12px; font-size: 0.875rem; color: var(--text-secondary);">
+                                <i class="fas fa-star"></i> 根类
+                            </h4>
+                            <ul class="class-list">
+                                <li class="class-item" onclick="focusClass('BaseComponent')">
+                                    <i class="fas fa-cube"></i>
+                                    <div class="class-info">
+                                        <div class="class-name">BaseComponent</div>
+                                        <div class="class-meta">抽象基类 · 16个子类</div>
+                                    </div>
+                                    <span class="inheritance-badge">根</span>
+                                </li>
+                                <li class="class-item" onclick="focusClass('BaseModel')">
+                                    <i class="fas fa-database"></i>
+                                    <div class="class-info">
+                                        <div class="class-name">BaseModel</div>
+                                        <div class="class-meta">模型基类 · 12个子类</div>
+                                    </div>
+                                    <span class="inheritance-badge">根</span>
+                                </li>
+                                <li class="class-item" onclick="focusClass('View')">
+                                    <i class="fas fa-eye"></i>
+                                    <div class="class-info">
+                                        <div class="class-name">View</div>
+                                        <div class="class-meta">视图基类 · 8个子类</div>
+                                    </div>
+                                    <span class="inheritance-badge">根</span>
+                                </li>
+                            </ul>
+
+                            <h4 style="margin: 20px 0 12px; font-size: 0.875rem; color: var(--text-secondary);">
+                                <i class="fas fa-code-branch"></i> 最深继承链
+                            </h4>
+                            <ul class="class-list">
+                                <li class="class-item">
+                                    <i class="fas fa-arrow-right"></i>
+                                    <div class="class-info">
+                                        <div class="class-name">BaseComponent → View → Button → CustomButton → SmartButton</div>
+                                        <div class="class-meta">5层继承深度</div>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../js/data.js"></script>
+    <script src="../js/graph.js"></script>
+    <script>
+        let hierarchyVisualizer = null;
+        let networkVisualizer = null;
+        let currentView = 'tree';
+
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    initTreeView();
+                });
+            });
+            
+            // Setup search
+            document.getElementById('classSearch').addEventListener('input', function(e) {
+                searchClasses(e.target.value);
+            });
+        });
+
+        // 初始化树形视图
+        function initTreeView() {
+            const container = d3.select('#classHierarchyGraph');
+            container.selectAll('*').remove();
+
+            const data = KGData.classHierarchy;
+            
+            // Find root nodes (nodes with no parent)
+            const childIds = new Set(data.edges.map(e => e.from));
+            const rootNodes = data.nodes.filter(n => !childIds.has(n.id));
+            
+            // If multiple roots, create a virtual root
+            let nodes = [...data.nodes];
+            let edges = [...data.edges];
+            if (rootNodes.length > 1) {
+                nodes.push({ id: '__root__', label: 'Root', level: -1, type: 'root' });
+                rootNodes.forEach(r => {
+                    edges.push({ from: r.id, to: '__root__' });
+                });
+            }
+            
+            // Convert to hierarchy - edges: from=child, to=parent
+            let root;
+            try {
+                root = d3.stratify()
+                    .id(d => d.id)
+                    .parentId(d => {
+                        const edge = edges.find(e => e.from === d.id);
+                        return edge ? edge.to : null;
+                    })
+                    (nodes);
+            } catch(e) {
+                console.error('Stratify error:', e);
+                return;
+            }
+
+            const containerEl = document.getElementById('classHierarchyGraph');
+            const width = containerEl.offsetWidth || 800;
+            const height = containerEl.offsetHeight || 500;
+            const margin = { top: 20, right: 90, bottom: 30, left: 90 };
+
+            const svg = container.append('svg')
+                .attr('width', '100%')
+                .attr('height', '100%')
+                .attr('viewBox', `0 0 ${width} ${height}`)
+                .call(d3.zoom().on('zoom', (event) => {
+                    g.attr('transform', event.transform);
+                }));
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const tree = d3.tree().nodeSize([28, 180]);
+
+            tree(root);
+
+            // Links
+            g.selectAll('.link')
+                .data(root.links())
+                .enter().append('path')
+                .attr('class', 'link')
+                .attr('d', d3.linkHorizontal()
+                    .x(d => d.y)
+                    .y(d => d.x))
+                .style('fill', 'none')
+                .style('stroke', '#475569')
+                .style('stroke-width', 1.5);
+
+            // Nodes
+            const node = g.selectAll('.node')
+                .data(root.descendants())
+                .enter().append('g')
+                .attr('class', d => 'node' + (d.children ? ' node--internal' : ' node--leaf'))
+                .attr('transform', d => `translate(${d.y},${d.x})`);
+
+            node.append('circle')
+                .attr('r', d => d.data.id === '__root__' ? 0 : 8)
+                .style('fill', d => {
+                    if (d.data.id === '__root__') return 'transparent';
+                    const type = d.data.type || d.data.data?.type;
+                    if (type === 'abstract') return '#a855f7';
+                    if (type === 'component') return '#3b82f6';
+                    if (type === 'model') return '#10b981';
+                    if (type === 'interface') return '#f59e0b';
+                    return '#64748b';
+                })
+                .style('stroke', d => d.data.id === '__root__' ? 'transparent' : '#1e293b')
+                .style('stroke-width', 2);
+
+            node.append('text')
+                .attr('dy', '.35em')
+                .attr('x', d => d.children ? -12 : 12)
+                .style('text-anchor', d => d.children ? 'end' : 'start')
+                .style('fill', '#f1f5f9')
+                .style('font-size', '12px')
+                .style('pointer-events', 'none')
+                .text(d => d.data.id === '__root__' ? '' : d.data.label);
+                
+            // Fit tree to view
+            const treeBounds = root.descendants().reduce((acc, d) => ({
+                minX: Math.min(acc.minX, d.x),
+                maxX: Math.max(acc.maxX, d.x),
+                minY: Math.min(acc.minY, d.y),
+                maxY: Math.max(acc.maxY, d.y)
+            }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+            
+            const treeWidth = treeBounds.maxY - treeBounds.minY + 200;
+            const treeHeight = treeBounds.maxX - treeBounds.minX + 100;
+            
+            svg.attr('viewBox', `${treeBounds.minY - 100} ${treeBounds.minX - 50} ${treeWidth} ${treeHeight}`);
+        }
+
+        // 初始化网络视图
+        function initNetworkView() {
+            const data = KGData.classHierarchy;
+            
+            // Convert to vis.js format
+            const nodes = data.nodes.map(n => ({
+                id: n.id,
+                label: n.label,
+                level: n.level,
+                color: getNodeColor(n.type),
+                shape: n.type === 'interface' ? 'diamond' : 'dot'
+            }));
+
+            const edges = data.edges.map(e => ({
+                from: e.from,
+                to: e.to,
+                arrows: 'to',
+                color: { color: '#475569' }
+            }));
+
+            networkVisualizer = new GraphVisualizer('classHierarchyGraph', {
+                layout: {
+                    hierarchical: {
+                        enabled: true,
+                        direction: 'UD',
+                        sortMethod: 'directed'
+                    }
+                },
+                physics: {
+                    hierarchicalRepulsion: {
+                        centralGravity: 0.0,
+                        springLength: 100,
+                        springConstant: 0.01,
+                        nodeDistance: 120,
+                        damping: 0.09
+                    }
+                }
+            });
+
+            networkVisualizer.init(nodes, edges);
+        }
+
+        // 获取节点颜色
+        function getNodeColor(type) {
+            const colors = {
+                'abstract': '#9C27B0',
+                'class': '#4CAF50',
+                'component': '#2196F3',
+                'interface': '#FF9800',
+                'model': '#00BCD4'
+            };
+            return colors[type] || '#64748B';
+        }
+
+        // 切换视图
+        function switchView(view, event) {
+            currentView = view;
+
+            document.querySelectorAll('.view-mode-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            const btn = event.target.closest('.view-mode-btn');
+            if (btn) btn.classList.add('active');
+
+            if (view === 'tree') {
+                if (networkVisualizer) {
+                    networkVisualizer.destroy();
+                    networkVisualizer = null;
+                }
+                initTreeView();
+            } else {
+                initNetworkView();
+            }
+        }
+
+        // 搜索类
+        function searchClasses(query) {
+            if (!query) return;
+            
+            if (networkVisualizer && currentView === 'network') {
+                networkVisualizer.searchNodes(query);
+            }
+        }
+
+        // 聚焦到特定类
+        function focusClass(className) {
+            if (networkVisualizer && currentView === 'network') {
+                networkVisualizer.searchNodes(className);
+            }
+        }
+
+        // 重置缩放
+        function resetZoom() {
+            if (networkVisualizer && currentView === 'network') {
+                networkVisualizer.fit();
+            } else {
+                initTreeView();
+            }
+        }
+
+        // 处理窗口大小变化
+        window.addEventListener('resize', () => {
+            if (currentView === 'tree') {
+                initTreeView();
+            }
+        });
+    </script>
+</body>
+</html>
