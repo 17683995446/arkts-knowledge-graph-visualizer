@@ -298,6 +298,15 @@
         let queryNetwork = null;
         let queryTimer = null;
 
+        // 添加 storage 事件监听实现跨页面同步 (Bug #122 fix)
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'kg_query_history') {
+                console.log('Detected cross-tab storage change, reloading history');
+                queryHistory = loadQueryHistory();
+                renderHistory();
+            }
+        });
+
         // 初始化
         document.addEventListener('DOMContentLoaded', () => {
             renderHistory();
@@ -308,6 +317,14 @@
             const input = document.getElementById('queryInput');
             input.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
+                    executeQuery();
+                }
+            });
+
+            // Bug #127 fix: Handle browser back/forward buttons
+            window.addEventListener('popstate', (e) => {
+                if (e.state && e.state.query) {
+                    document.getElementById('queryInput').value = e.state.query;
                     executeQuery();
                 }
             });
@@ -327,6 +344,9 @@
 
             // 添加到历史
             addToHistory(query);
+
+            // Bug #127 fix: Save state to history
+            history.pushState({ query: query }, '', window.location.href);
 
             // 模拟查询处理
             showLoading();
@@ -586,6 +606,8 @@ LIMIT 50;`;
                 console.warn('Invalid query passed to addToHistory:', query);
                 return;
             }
+            // Bug #122 fix: 重新读取以确保获取最新数据
+            queryHistory = loadQueryHistory();
             // 移除重复
             queryHistory = queryHistory.filter(q => q !== query);
             // 添加到开头
@@ -844,6 +866,14 @@ LIMIT 50;`;
             const modal = document.getElementById('helpModal');
             if (modal && event.target === modal) {
                 modal.style.display = 'none';
+            }
+        });
+
+        // Bug #122 fix: 页面卸载时清理
+        window.addEventListener('beforeunload', () => {
+            if (queryTimer) {
+                clearTimeout(queryTimer);
+                queryTimer = null;
             }
         });
     </script>

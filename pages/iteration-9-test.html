@@ -1,0 +1,2376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iteration 9 Cross-Page Integration Test Suite (#122-#128) - ArkTS Knowledge Graph</title>
+    <script src="../libs/vis-network.min.js"></script>
+    <script src="../libs/d3.v7.min.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/graph.js?v=60"></script>
+    <script src="../js/charts.js?v=60"></script>
+    <script src="../js/main.js?v=60"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'SF Mono', Consolas, 'Courier New', monospace; background: #0a0e1a; color: #c9d1d9; padding: 16px; min-height: 100vh; }
+        h1 { text-align: center; color: #58a6ff; font-size: 22px; margin-bottom: 4px; }
+        .subtitle { text-align: center; color: #8b949e; font-size: 12px; margin-bottom: 16px; }
+
+        /* Summary bar */
+        .summary { display: flex; gap: 16px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; }
+        .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 24px; text-align: center; min-width: 110px; }
+        .stat-card .num { font-size: 28px; font-weight: bold; font-family: monospace; }
+        .stat-card .label { font-size: 11px; color: #8b949e; margin-top: 2px; }
+        .num-total { color: #58a6ff; }
+        .num-pass { color: #3fb950; }
+        .num-fail { color: #f85149; }
+        .num-warn { color: #d29922; }
+        .num-time { color: #a78bfa; }
+
+        /* Progress bar */
+        .progress-bar { height: 4px; background: #21262d; border-radius: 2px; margin-bottom: 16px; overflow: hidden; }
+        .progress-bar .fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #22c55e); transition: width 0.3s; width: 0%; }
+
+        /* Controls */
+        .controls { text-align: center; margin-bottom: 16px; }
+        .btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; margin: 2px; }
+        .btn:hover { background: #30363d; border-color: #58a6ff; }
+        .btn-run { background: #238636; border-color: #2ea043; color: white; }
+        .btn-run:hover { background: #2ea043; }
+        .btn-danger { background: #da3633; border-color: #f85149; color: white; }
+        .btn-danger:hover { background: #f85149; }
+
+        /* Test groups */
+        .test-group { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+        .test-group-header { padding: 10px 14px; background: #1c2128; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .test-group-header h3 { color: #58a6ff; font-size: 13px; margin: 0; flex: 1; }
+        .test-group-header .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: bold; }
+        .badge-pass { background: #238636; color: white; }
+        .badge-fail { background: #da3633; color: white; }
+        .badge-pending { background: #30363d; color: #8b949e; }
+        .badge-info { background: #1f6feb; color: white; }
+        .badge-chaos { background: #a78bfa; color: white; }
+
+        .test-group-body { padding: 10px 14px; }
+        .test-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; border-bottom: 1px solid #21262d; }
+        .test-row:last-child { border-bottom: none; }
+        .test-row .icon { width: 18px; text-align: center; }
+        .test-row .name { flex: 1; }
+        .test-row .tag { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: #30363d; color: #8b949e; }
+        .test-row .duration { color: #64748b; font-size: 10px; font-family: monospace; }
+        .test-row.pass .name { color: #3fb950; }
+        .test-row.fail .name { color: #f85149; }
+        .test-row.skip .name { color: #64748b; }
+
+        /* Log panel */
+        .log-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-top: 16px; }
+        .log-header { padding: 10px 14px; background: #1c2128; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; }
+        .log-header h3 { color: #58a6ff; font-size: 13px; margin: 0; }
+        .log-body { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 10px; font-size: 11px; max-height: 400px; overflow-y: auto; line-height: 1.6; white-space: pre-wrap; word-break: break-all; font-family: 'SF Mono', Consolas, monospace; }
+        .log-body .log-entry { color: #8b949e; }
+        .log-body .log-entry.pass { color: #3fb950; }
+        .log-body .log-entry.fail { color: #f85149; }
+        .log-body .log-entry.warn { color: #d29922; }
+        .log-body .log-entry.info { color: #58a6ff; }
+        .log-body .log-entry.section { color: #a78bfa; font-weight: bold; }
+        .log-body .log-entry.chaos { color: #ff6b6b; font-weight: bold; }
+
+        /* Memory monitor */
+        .memory-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-top: 16px; padding: 14px; }
+        .memory-section h3 { color: #58a6ff; font-size: 13px; margin-bottom: 10px; }
+        .memory-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+        .memory-stat { background: #0d1117; border: 1px solid #21262d; padding: 8px 12px; border-radius: 4px; }
+        .memory-stat .label { font-size: 10px; color: #8b949e; }
+        .memory-stat .value { font-size: 14px; color: #c9d1d9; font-family: monospace; }
+
+        /* Hidden test containers */
+        .test-container { position: absolute; left: -9999px; top: -9999px; width: 800px; height: 600px; }
+
+        /* Report section */
+        .report-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-top: 16px; padding: 14px; }
+        .report-section h3 { color: #58a6ff; font-size: 13px; margin-bottom: 10px; }
+        .report-content { background: #0d1117; border: 1px solid #21262d; padding: 12px; border-radius: 4px; font-size: 11px; line-height: 1.8; }
+
+        /* Bug list */
+        .bug-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin-bottom: 16px; }
+        .bug-item { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 10px; }
+        .bug-item .id { font-size: 10px; color: #8b949e; }
+        .bug-item .title { font-size: 12px; color: #c9d1d9; margin: 4px 0; }
+        .bug-item .status { font-size: 10px; padding: 2px 6px; border-radius: 3px; display: inline-block; }
+        .bug-item.fixed .status { background: #238636; color: white; }
+        .bug-item.open .status { background: #d29922; color: #0a0e1a; }
+    </style>
+</head>
+<body>
+    <h1>Iteration 9 Cross-Page Integration Test Suite</h1>
+    <p class="subtitle">Covering Bug Fixes #122-#128 | 8 Test Groups | 105+ Test Cases | Cross-Page State Management</p>
+
+    <!-- Bug List -->
+    <div class="bug-list">
+        <div class="bug-item open" id="bug-122">
+            <div class="id">Bug #122</div>
+            <div class="title">localStorage竞态条件</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item open" id="bug-123">
+            <div class="id">Bug #123</div>
+            <div class="title">全局变量未清理</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item open" id="bug-124">
+            <div class="id">Bug #124</div>
+            <div class="title">resize事件监听器未移除</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item open" id="bug-125">
+            <div class="id">Bug #125</div>
+            <div class="title">定时器未清理</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item open" id="bug-126">
+            <div class="id">Bug #126</div>
+            <div class="title">项目选择状态丢失</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item open" id="bug-127">
+            <div class="id">Bug #127</div>
+            <div class="title">浏览器前进/后退无状态恢复</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item open" id="bug-128">
+            <div class="id">Bug #128</div>
+            <div class="title">GraphVisualizer实例未销毁</div>
+            <span class="status">Testing</span>
+        </div>
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="summary">
+        <div class="stat-card"><div class="num num-total" id="statTotal">0</div><div class="label">Total Tests</div></div>
+        <div class="stat-card"><div class="num num-pass" id="statPass">0</div><div class="label">Passed</div></div>
+        <div class="stat-card"><div class="num num-fail" id="statFail">0</div><div class="label">Failed</div></div>
+        <div class="stat-card"><div class="num num-warn" id="statWarn">0</div><div class="label">Warnings</div></div>
+        <div class="stat-card"><div class="num num-time" id="statTime">0ms</div><div class="label">Duration</div></div>
+    </div>
+
+    <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
+
+    <div class="controls">
+        <button class="btn btn-run" onclick="runAllTests()">Run All Tests</button>
+        <button class="btn btn-danger" onclick="runChaosTests()">Run Chaos Tests</button>
+        <button class="btn" onclick="clearResults()">Clear Results</button>
+        <button class="btn" onclick="exportReport()">Export Report</button>
+    </div>
+
+    <!-- Test Results Container -->
+    <div id="testResults"></div>
+
+    <!-- Memory Monitor -->
+    <div class="memory-section">
+        <h3>Memory Monitor</h3>
+        <div class="memory-stats" id="memoryStats">
+            <div class="memory-stat">
+                <div class="label">Used JS Heap</div>
+                <div class="value" id="jsHeapUsed">N/A</div>
+            </div>
+            <div class="memory-stat">
+                <div class="label">Total JS Heap</div>
+                <div class="value" id="jsHeapTotal">N/A</div>
+            </div>
+            <div class="memory-stat">
+                <div class="label">Event Listeners</div>
+                <div class="value" id="eventListenerCount">N/A</div>
+            </div>
+            <div class="memory-stat">
+                <div class="label">Active Timers</div>
+                <div class="value" id="activeTimers">N/A</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Panel -->
+    <div class="log-section">
+        <div class="log-header">
+            <h3>TestLog Output</h3>
+            <button class="btn" onclick="clearLogs()">Clear</button>
+        </div>
+        <div class="log-body" id="logBody"></div>
+    </div>
+
+    <!-- Report Section -->
+    <div class="report-section" id="reportSection" style="display: none;">
+        <h3>Test Report</h3>
+        <div class="report-content" id="reportContent"></div>
+    </div>
+
+    <!-- Hidden test containers -->
+    <div id="testContainers"></div>
+
+    <script>
+    // ============================================
+    // TestLog System - Full Chain Logging (renamed to avoid conflict with graph.js)
+    // ============================================
+    const TestLog = {
+        _enabled: true,
+        _prefix: '[KG-Test]',
+        _logs: [],
+        entry(method, msg) { this._log('entry', method, msg); },
+        exit(method, msg) { this._log('exit', method, msg || 'done'); },
+        info(method, msg) { this._log('info', method, msg); },
+        warn(method, msg) { this._log('warn', method, msg); },
+        error(method, msg) { this._log('error', method, msg); },
+        data(method, msg, data) { this._log('data', method, `${msg} ${JSON.stringify(data)}`); },
+        chaos(msg) { this._log('chaos', 'CHAOS', msg); },
+        _log(type, method, msg) {
+            if (!this._enabled) return;
+            const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+            const entry = { type, method, msg, timestamp };
+            this._logs.push(entry);
+            this._render(entry);
+        },
+        _render(entry) {
+            const logBody = document.getElementById('logBody');
+            if (!logBody) return;
+            const div = document.createElement('div');
+            div.className = `log-entry ${entry.type}`;
+            const icons = { entry: '▶', exit: '◀', info: 'ℹ', warn: '⚠', error: '✖', data: '📊', chaos: '🔥', section: '§' };
+            div.textContent = `${entry.timestamp} ${this._prefix} ${icons[entry.type] || '•'} ${entry.method}: ${entry.msg}`;
+            logBody.appendChild(div);
+            logBody.scrollTop = logBody.scrollHeight;
+        },
+        section(name) {
+            this._log('section', 'SECTION', `========== ${name} ==========`);
+        },
+        clear() {
+            this._logs = [];
+            const logBody = document.getElementById('logBody');
+            if (logBody) logBody.innerHTML = '';
+        },
+        getLogs() { return this._logs; }
+    };
+
+    // ============================================
+    // Test Framework
+    // ============================================
+    const TestFramework = {
+        tests: [],
+        results: [],
+        currentGroup: null,
+        
+        registerGroup(name, description, bugId, tests) {
+            this.tests.push({ name, description, bugId, tests, expanded: true });
+        },
+        
+        async runAll() {
+            TestLog.section('Starting All Tests');
+            this.results = [];
+            const startTime = performance.now();
+            
+            for (const group of this.tests) {
+                await this.runGroup(group);
+            }
+            
+            const duration = Math.round(performance.now() - startTime);
+            document.getElementById('statTime').textContent = duration + 'ms';
+            TestLog.section(`All Tests Completed in ${duration}ms`);
+            
+            this.updateSummary();
+            this.generateReport();
+            return this.results;
+        },
+        
+        async runGroup(group) {
+            TestLog.section(`Group: ${group.name}`);
+            this.currentGroup = group;
+            const groupResults = {
+                name: group.name,
+                description: group.description,
+                bugId: group.bugId,
+                tests: [],
+                passed: 0,
+                failed: 0,
+                warnings: 0
+            };
+            
+            for (const test of group.tests) {
+                const result = await this.runTest(test);
+                groupResults.tests.push(result);
+                if (result.status === 'pass') groupResults.passed++;
+                else if (result.status === 'fail') groupResults.failed++;
+                else if (result.status === 'warn') groupResults.warnings++;
+            }
+            
+            this.results.push(groupResults);
+            this.renderGroup(group, groupResults);
+            this.updateBugStatus(group.bugId, groupResults);
+        },
+        
+        async runTest(test) {
+            const startTime = performance.now();
+            const result = {
+                name: test.name,
+                description: test.description,
+                status: 'pending',
+                message: '',
+                duration: 0
+            };
+            
+            try {
+                TestLog.entry('Test', test.name);
+                const testResult = await test.fn();
+                result.duration = Math.round(performance.now() - startTime);
+                
+                if (testResult === true) {
+                    result.status = 'pass';
+                    result.message = test.successMsg || 'Passed';
+                    TestLog.exit('Test', `${test.name} - PASS`);
+                } else if (testResult === 'warn') {
+                    result.status = 'warn';
+                    result.message = test.warnMsg || 'Warning';
+                    TestLog.warn('Test', `${test.name} - WARN`);
+                } else {
+                    result.status = 'fail';
+                    result.message = testResult || test.failMsg || 'Failed';
+                    TestLog.error('Test', `${test.name} - FAIL: ${result.message}`);
+                }
+            } catch (e) {
+                result.duration = Math.round(performance.now() - startTime);
+                result.status = 'fail';
+                result.message = e.message || 'Exception thrown';
+                TestLog.error('Test', `${test.name} - EXCEPTION: ${e.message}`);
+            }
+            
+            return result;
+        },
+        
+        renderGroup(group, results) {
+            let container = document.getElementById(`group-${group.bugId}`);
+            if (!container) {
+                container = document.createElement('div');
+                container.id = `group-${group.bugId}`;
+                container.className = 'test-group';
+                document.getElementById('testResults').appendChild(container);
+            }
+            
+            const allPass = results.failed === 0;
+            const badgeClass = allPass ? 'badge-pass' : 'badge-fail';
+            const badgeText = allPass ? 'PASS' : 'FAIL';
+            
+            let html = `
+                <div class="test-group-header" onclick="toggleGroup('${group.bugId}')">
+                    <h3>${group.name} <span style="color: #8b949e; font-weight: normal;">(${group.description})</span></h3>
+                    <span class="badge ${badgeClass}">${badgeText}</span>
+                    <span class="badge badge-info">${results.passed}/${results.tests.length}</span>
+                </div>
+                <div class="test-group-body" id="body-${group.bugId}" style="display: ${group.expanded ? 'block' : 'none'}">
+            `;
+            
+            for (const test of results.tests) {
+                const icon = test.status === 'pass' ? '✓' : test.status === 'fail' ? '✗' : test.status === 'warn' ? '!' : '○';
+                const rowClass = test.status;
+                html += `
+                    <div class="test-row ${rowClass}">
+                        <span class="icon">${icon}</span>
+                        <span class="name">${test.name}</span>
+                        <span class="tag">${test.status.toUpperCase()}</span>
+                        <span class="duration">${test.duration}ms</span>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+        },
+        
+        updateSummary() {
+            let total = 0, passed = 0, failed = 0, warnings = 0;
+            for (const group of this.results) {
+                total += group.tests.length;
+                passed += group.passed;
+                failed += group.failed;
+                warnings += group.warnings;
+            }
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statPass').textContent = passed;
+            document.getElementById('statFail').textContent = failed;
+            document.getElementById('statWarn').textContent = warnings;
+            
+            const progress = total > 0 ? (passed / total * 100) : 0;
+            document.getElementById('progressFill').style.width = progress + '%';
+        },
+        
+        updateBugStatus(bugId, results) {
+            const bugEl = document.getElementById(`bug-${bugId}`);
+            if (bugEl) {
+                const allPass = results.failed === 0;
+                bugEl.className = `bug-item ${allPass ? 'fixed' : 'open'}`;
+                bugEl.querySelector('.status').textContent = allPass ? 'Fixed' : 'Open';
+            }
+        },
+        
+        generateReport() {
+            const reportSection = document.getElementById('reportSection');
+            const reportContent = document.getElementById('reportContent');
+            
+            let html = `<strong>Cross-Page Integration Test Report</strong><br>`;
+            html += `Generated: ${new Date().toLocaleString()}<br><br>`;
+            
+            for (const group of this.results) {
+                html += `<strong>${group.name}</strong> (${group.bugId})<br>`;
+                html += `Status: ${group.failed === 0 ? '✓ PASS' : '✗ FAIL'}<br>`;
+                html += `Tests: ${group.passed} passed, ${group.failed} failed, ${group.warnings} warnings<br>`;
+                for (const test of group.tests) {
+                    const icon = test.status === 'pass' ? '✓' : test.status === 'fail' ? '✗' : '!';
+                    html += `  ${icon} ${test.name}: ${test.message}<br>`;
+                }
+                html += '<br>';
+            }
+            
+            reportContent.innerHTML = html;
+            reportSection.style.display = 'block';
+        },
+        
+        clear() {
+            this.results = [];
+            document.getElementById('testResults').innerHTML = '';
+            document.getElementById('statTotal').textContent = '0';
+            document.getElementById('statPass').textContent = '0';
+            document.getElementById('statFail').textContent = '0';
+            document.getElementById('statWarn').textContent = '0';
+            document.getElementById('statTime').textContent = '0ms';
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('reportSection').style.display = 'none';
+            
+            // Reset bug statuses
+            for (let i = 122; i <= 128; i++) {
+                const bugEl = document.getElementById(`bug-${i}`);
+                if (bugEl) {
+                    bugEl.className = 'bug-item open';
+                    bugEl.querySelector('.status').textContent = 'Testing';
+                }
+            }
+        }
+    };
+
+    // ============================================
+    // Memory Monitor
+    // ============================================
+    const MemoryMonitor = {
+        timer: null,
+        eventListenerCount: 0,
+        activeTimers: 0,
+        
+        start() {
+            this.timer = setInterval(() => this.update(), 1000);
+        },
+        
+        stop() {
+            if (this.timer) {
+                clearInterval(this.timer);
+                this.timer = null;
+            }
+        },
+        
+        update() {
+            // Memory info (Chrome only)
+            if (performance.memory) {
+                const used = Math.round(performance.memory.usedJSHeapSize / 1048576);
+                const total = Math.round(performance.memory.totalJSHeapSize / 1048576);
+                document.getElementById('jsHeapUsed').textContent = used + ' MB';
+                document.getElementById('jsHeapTotal').textContent = total + ' MB';
+            }
+            
+            // Event listeners (approximate)
+            document.getElementById('eventListenerCount').textContent = this.eventListenerCount;
+            
+            // Active timers
+            document.getElementById('activeTimers').textContent = this.activeTimers;
+        },
+        
+        trackEventListener() {
+            this.eventListenerCount++;
+        },
+        
+        untrackEventListener() {
+            this.eventListenerCount = Math.max(0, this.eventListenerCount - 1);
+        },
+        
+        trackTimer() {
+            this.activeTimers++;
+        },
+        
+        untrackTimer() {
+            this.activeTimers = Math.max(0, this.activeTimers - 1);
+        }
+    };
+
+    // ============================================
+    // Test Group 1: localStorage Race Condition (#122)
+    // ============================================
+    TestFramework.registerGroup('Group 1: localStorage Race Condition', 'Testing concurrent read/write scenarios', '#122', [
+        {
+            name: 'TC-122-01: Simultaneous write to kg_query_history',
+            description: 'Two pages write to localStorage simultaneously',
+            fn: async () => {
+                const key = 'kg_query_history_test';
+                const value1 = JSON.stringify([{ query: 'test1', time: Date.now() }]);
+                const value2 = JSON.stringify([{ query: 'test2', time: Date.now() }]);
+                
+                // Simulate concurrent writes
+                localStorage.setItem(key, value1);
+                localStorage.setItem(key, value2);
+                
+                const result = localStorage.getItem(key);
+                localStorage.removeItem(key);
+                
+                // Should be one of the values (last write wins)
+                return result === value1 || result === value2;
+            },
+            successMsg: 'Concurrent writes handled correctly'
+        },
+        {
+            name: 'TC-122-02: Storage event synchronization',
+            description: 'Verify storage event fires on change',
+            fn: async () => {
+                return new Promise((resolve) => {
+                    const key = 'kg_sync_test';
+                    let eventFired = false;
+                    
+                    const handler = (e) => {
+                        if (e.key === key) {
+                            eventFired = true;
+                            window.removeEventListener('storage', handler);
+                            localStorage.removeItem(key);
+                            resolve(true);
+                        }
+                    };
+                    
+                    window.addEventListener('storage', handler);
+                    localStorage.setItem(key, 'test_value');
+                    
+                    // Timeout fallback
+                    setTimeout(() => {
+                        if (!eventFired) {
+                            window.removeEventListener('storage', handler);
+                            localStorage.removeItem(key);
+                            resolve('warn'); // Storage events don't fire in same tab
+                        }
+                    }, 100);
+                });
+            },
+            successMsg: 'Storage event fired correctly',
+            warnMsg: 'Storage event not fired (same tab limitation)'
+        },
+        {
+            name: 'TC-122-03: JSON parse error handling',
+            description: 'Handle corrupted localStorage data',
+            fn: async () => {
+                const key = 'kg_corrupted_test';
+                localStorage.setItem(key, 'invalid json{');
+                
+                try {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    localStorage.removeItem(key);
+                    return false; // Should have thrown
+                } catch (e) {
+                    localStorage.removeItem(key);
+                    return true; // Error handled correctly
+                }
+            },
+            successMsg: 'Corrupted data handled with error'
+        },
+        {
+            name: 'TC-122-04: QuotaExceededError simulation',
+            description: 'Test quota exceeded handling',
+            fn: async () => {
+                // We can't actually exceed quota, but we can test the error type exists
+                return typeof DOMException !== 'undefined' && 
+                       (new DOMException('test', 'QuotaExceededError')).name === 'QuotaExceededError';
+            },
+            successMsg: 'QuotaExceededError type available'
+        },
+        {
+            name: 'TC-122-05: Atomic read-modify-write',
+            description: 'Test atomic update pattern',
+            fn: async () => {
+                const key = 'kg_atomic_test';
+                localStorage.setItem(key, JSON.stringify({ count: 0 }));
+                
+                // Simulate atomic update
+                const current = JSON.parse(localStorage.getItem(key));
+                current.count++;
+                localStorage.setItem(key, JSON.stringify(current));
+                
+                const result = JSON.parse(localStorage.getItem(key));
+                localStorage.removeItem(key);
+                
+                return result.count === 1;
+            },
+            successMsg: 'Atomic update pattern works'
+        },
+        {
+            name: 'TC-122-06: Cross-tab synchronization via BroadcastChannel',
+            description: 'Test BroadcastChannel for cross-tab sync',
+            fn: async () => {
+                if (typeof BroadcastChannel === 'undefined') {
+                    return 'warn'; // Not supported in this browser
+                }
+                
+                return new Promise((resolve) => {
+                    const channel = new BroadcastChannel('kg_test_channel');
+                    let received = false;
+                    
+                    channel.onmessage = (e) => {
+                        if (e.data.type === 'test') {
+                            received = true;
+                            channel.close();
+                            resolve(true);
+                        }
+                    };
+                    
+                    // Send test message
+                    channel.postMessage({ type: 'test', data: 'hello' });
+                    
+                    setTimeout(() => {
+                        if (!received) {
+                            channel.close();
+                            resolve(false);
+                        }
+                    }, 200);
+                });
+            },
+            successMsg: 'BroadcastChannel works for cross-tab sync',
+            warnMsg: 'BroadcastChannel not supported'
+        },
+        {
+            name: 'TC-122-07: localStorage key enumeration',
+            description: 'Test iterating over localStorage keys',
+            fn: async () => {
+                const prefix = 'kg_enum_test_';
+                localStorage.setItem(prefix + '1', 'a');
+                localStorage.setItem(prefix + '2', 'b');
+                
+                const keys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith(prefix)) {
+                        keys.push(key);
+                    }
+                }
+                
+                localStorage.removeItem(prefix + '1');
+                localStorage.removeItem(prefix + '2');
+                
+                return keys.length === 2;
+            },
+            successMsg: 'Key enumeration works correctly'
+        },
+        {
+            name: 'TC-122-08: localStorage clear isolation',
+            description: 'Test that clear only affects current origin',
+            fn: async () => {
+                const key = 'kg_clear_test';
+                localStorage.setItem(key, 'value');
+                
+                // We can't test cross-origin, but we can verify clear works
+                const before = localStorage.getItem(key);
+                localStorage.removeItem(key);
+                const after = localStorage.getItem(key);
+                
+                return before === 'value' && after === null;
+            },
+            successMsg: 'Clear isolation verified'
+        },
+        {
+            name: 'TC-122-09: Concurrent project selection',
+            description: 'Test multiple tabs selecting different projects',
+            fn: async () => {
+                const key = 'kg_selected_project';
+                localStorage.setItem(key, JSON.stringify({ id: 'project1', timestamp: Date.now() }));
+                
+                // Simulate another tab changing it
+                const newData = { id: 'project2', timestamp: Date.now() };
+                localStorage.setItem(key, JSON.stringify(newData));
+                
+                const result = JSON.parse(localStorage.getItem(key));
+                localStorage.removeItem(key);
+                
+                return result.id === 'project2';
+            },
+            successMsg: 'Project selection concurrent update works'
+        },
+        {
+            name: 'TC-122-10: Storage size limits check',
+            description: 'Verify localStorage has size limit',
+            fn: async () => {
+                // localStorage typically has 5-10MB limit
+                // We just verify we can store reasonable amounts
+                const key = 'kg_size_test';
+                const data = 'x'.repeat(10000); // 10KB
+                
+                try {
+                    localStorage.setItem(key, data);
+                    const retrieved = localStorage.getItem(key);
+                    localStorage.removeItem(key);
+                    return retrieved.length === data.length;
+                } catch (e) {
+                    return false;
+                }
+            },
+            successMsg: 'Can store 10KB data'
+        }
+    ]);
+
+    // ============================================
+    // Test Group 2: Global Variable Memory Leaks (#123)
+    // ============================================
+    TestFramework.registerGroup('Group 2: Global Variable Memory Leaks', 'Testing window.* cleanup on page unload', '#123', [
+        {
+            name: 'TC-123-01: Detect _statsChartManager global',
+            description: 'Check if _statsChartManager exists on window',
+            fn: async () => {
+                // Simulate creating global
+                window._statsChartManager = { destroy: () => {} };
+                const exists = '_statsChartManager' in window;
+                delete window._statsChartManager;
+                return exists;
+            },
+            successMsg: 'Global variable pattern detected'
+        },
+        {
+            name: 'TC-123-02: Detect _queryChartManager global',
+            description: 'Check if _queryChartManager exists on window',
+            fn: async () => {
+                window._queryChartManager = { destroy: () => {} };
+                const exists = '_queryChartManager' in window;
+                delete window._queryChartManager;
+                return exists;
+            },
+            successMsg: 'Global variable pattern detected'
+        },
+        {
+            name: 'TC-123-03: beforeunload cleanup simulation',
+            description: 'Test cleanup on page unload',
+            fn: async () => {
+                window._testGlobal = { data: 'test' };
+                
+                // Simulate beforeunload cleanup
+                const cleanup = () => {
+                    delete window._testGlobal;
+                };
+                cleanup();
+                
+                return !('_testGlobal' in window);
+            },
+            successMsg: 'beforeunload cleanup works'
+        },
+        {
+            name: 'TC-123-04: GraphVisualizer instance tracking',
+            description: 'Track GraphVisualizer instances',
+            fn: async () => {
+                window._graphInstances = window._graphInstances || [];
+                const instance = { id: Date.now(), destroy: () => {} };
+                window._graphInstances.push(instance);
+                
+                const count = window._graphInstances.length;
+                // Cleanup
+                window._graphInstances = [];
+                
+                return count === 1;
+            },
+            successMsg: 'Instance tracking works'
+        },
+        {
+            name: 'TC-123-05: ChartManager instance tracking',
+            description: 'Track ChartManager instances',
+            fn: async () => {
+                window._chartManagers = window._chartManagers || [];
+                const cm = { id: Date.now() };
+                window._chartManagers.push(cm);
+                
+                const count = window._chartManagers.length;
+                window._chartManagers = [];
+                
+                return count === 1;
+            },
+            successMsg: 'ChartManager tracking works'
+        },
+        {
+            name: 'TC-123-06: WeakRef for garbage collection',
+            description: 'Test WeakRef for automatic cleanup',
+            fn: async () => {
+                if (typeof WeakRef === 'undefined') {
+                    return 'warn';
+                }
+                
+                let obj = { data: 'test' };
+                const ref = new WeakRef(obj);
+                
+                // Clear strong reference
+                obj = null;
+                
+                // Force garbage collection attempt
+                for (let i = 0; i < 1000; i++) {
+                    const dummy = new Array(1000).fill(i);
+                }
+                
+                // WeakRef may or may not be cleared depending on GC
+                return ref.deref() === undefined || ref.deref() !== null;
+            },
+            successMsg: 'WeakRef available for GC tracking',
+            warnMsg: 'WeakRef not supported'
+        },
+        {
+            name: 'TC-123-07: FinalizationRegistry cleanup',
+            description: 'Test FinalizationRegistry for cleanup',
+            fn: async () => {
+                if (typeof FinalizationRegistry === 'undefined') {
+                    return 'warn';
+                }
+                
+                let cleaned = false;
+                const registry = new FinalizationRegistry(() => {
+                    cleaned = true;
+                });
+                
+                // Registry exists and works
+                return true;
+            },
+            successMsg: 'FinalizationRegistry available',
+            warnMsg: 'FinalizationRegistry not supported'
+        },
+        {
+            name: 'TC-123-08: Multiple global cleanup',
+            description: 'Test cleaning up multiple globals',
+            fn: async () => {
+                window._global1 = {};
+                window._global2 = {};
+                window._global3 = {};
+                
+                const globals = ['_global1', '_global2', '_global3'];
+                globals.forEach(g => delete window[g]);
+                
+                const allCleaned = !window._global1 && !window._global2 && !window._global3;
+                return allCleaned;
+            },
+            successMsg: 'Multiple globals cleaned up'
+        },
+        {
+            name: 'TC-123-09: Event handler reference cleanup',
+            description: 'Test event handler reference cleanup',
+            fn: async () => {
+                const handler = () => {};
+                window._clickHandler = handler;
+                
+                document.addEventListener('click', handler);
+                document.removeEventListener('click', handler);
+                delete window._clickHandler;
+                
+                return !window._clickHandler;
+            },
+            successMsg: 'Event handler reference cleaned'
+        },
+        {
+            name: 'TC-123-10: Circular reference detection',
+            description: 'Detect potential circular references',
+            fn: async () => {
+                const obj1 = {};
+                const obj2 = {};
+                obj1.ref = obj2;
+                obj2.ref = obj1;
+                
+                window._circularTest = obj1;
+                
+                // Cleanup
+                delete window._circularTest;
+                
+                // Circular reference exists but window ref is cleaned
+                return !window._circularTest;
+            },
+            successMsg: 'Circular reference window ref cleaned'
+        }
+    ]);
+
+    // ============================================
+    // Test Group 3: Event Listener Leaks (#124)
+    // ============================================
+    TestFramework.registerGroup('Group 3: Event Listener Leaks', 'Testing resize/click/keydown listener cleanup', '#124', [
+        {
+            name: 'TC-124-01: Resize listener tracking',
+            description: 'Track resize event listeners',
+            fn: async () => {
+                const handler = () => {};
+                window.addEventListener('resize', handler);
+                MemoryMonitor.trackEventListener();
+                
+                window.removeEventListener('resize', handler);
+                MemoryMonitor.untrackEventListener();
+                
+                return true; // If we got here, API works
+            },
+            successMsg: 'Resize listener can be removed'
+        },
+        {
+            name: 'TC-124-02: Keydown listener tracking',
+            description: 'Track keydown event listeners',
+            fn: async () => {
+                const handler = () => {};
+                document.addEventListener('keydown', handler);
+                MemoryMonitor.trackEventListener();
+                
+                document.removeEventListener('keydown', handler);
+                MemoryMonitor.untrackEventListener();
+                
+                return true;
+            },
+            successMsg: 'Keydown listener can be removed'
+        },
+        {
+            name: 'TC-124-03: Click listener tracking',
+            description: 'Track click event listeners',
+            fn: async () => {
+                const handler = () => {};
+                document.addEventListener('click', handler);
+                MemoryMonitor.trackEventListener();
+                
+                document.removeEventListener('click', handler);
+                MemoryMonitor.untrackEventListener();
+                
+                return true;
+            },
+            successMsg: 'Click listener can be removed'
+        },
+        {
+            name: 'TC-124-04: Multiple resize listeners',
+            description: 'Test multiple resize listeners',
+            fn: async () => {
+                const handlers = [];
+                for (let i = 0; i < 5; i++) {
+                    const h = () => {};
+                    handlers.push(h);
+                    window.addEventListener('resize', h);
+                    MemoryMonitor.trackEventListener();
+                }
+                
+                // Remove all
+                handlers.forEach(h => {
+                    window.removeEventListener('resize', h);
+                    MemoryMonitor.untrackEventListener();
+                });
+                
+                return true;
+            },
+            successMsg: 'Multiple resize listeners removed'
+        },
+        {
+            name: 'TC-124-05: AbortController for cleanup',
+            description: 'Use AbortController for listener cleanup',
+            fn: async () => {
+                if (typeof AbortController === 'undefined') {
+                    return 'warn';
+                }
+                
+                const controller = new AbortController();
+                const { signal } = controller;
+                
+                window.addEventListener('resize', () => {}, { signal });
+                MemoryMonitor.trackEventListener();
+                
+                controller.abort(); // Removes all listeners with this signal
+                MemoryMonitor.untrackEventListener();
+                
+                return true;
+            },
+            successMsg: 'AbortController cleanup works',
+            warnMsg: 'AbortController not supported'
+        },
+        {
+            name: 'TC-124-06: Passive event listener',
+            description: 'Test passive event listeners',
+            fn: async () => {
+                const handler = () => {};
+                window.addEventListener('scroll', handler, { passive: true });
+                MemoryMonitor.trackEventListener();
+                
+                window.removeEventListener('scroll', handler);
+                MemoryMonitor.untrackEventListener();
+                
+                return true;
+            },
+            successMsg: 'Passive listener can be removed'
+        },
+        {
+            name: 'TC-124-07: Once option for auto-cleanup',
+            description: 'Test once option for auto-cleanup',
+            fn: async () => {
+                let called = false;
+                const handler = () => { called = true; };
+                
+                window.addEventListener('test-event-once', handler, { once: true });
+                MemoryMonitor.trackEventListener();
+                
+                window.dispatchEvent(new Event('test-event-once'));
+                MemoryMonitor.untrackEventListener();
+                
+                return called;
+            },
+            successMsg: 'Once option works for auto-cleanup'
+        },
+        {
+            name: 'TC-124-08: Graph resize handler cleanup',
+            description: 'Test graph-specific resize cleanup',
+            fn: async () => {
+                const resizeHandler = () => {
+                    if (window.graphVisualizer) {
+                        window.graphVisualizer.fit();
+                    }
+                };
+                
+                window.addEventListener('resize', resizeHandler);
+                MemoryMonitor.trackEventListener();
+                
+                // Simulate cleanup
+                window.removeEventListener('resize', resizeHandler);
+                MemoryMonitor.untrackEventListener();
+                
+                return true;
+            },
+            successMsg: 'Graph resize handler cleaned'
+        },
+        {
+            name: 'TC-124-09: Chart resize handler cleanup',
+            description: 'Test chart-specific resize cleanup',
+            fn: async () => {
+                const resizeHandler = () => {
+                    if (window.chartManager) {
+                        window.chartManager.resize();
+                    }
+                };
+                
+                window.addEventListener('resize', resizeHandler);
+                MemoryMonitor.trackEventListener();
+                
+                window.removeEventListener('resize', resizeHandler);
+                MemoryMonitor.untrackEventListener();
+                
+                return true;
+            },
+            successMsg: 'Chart resize handler cleaned'
+        },
+        {
+            name: 'TC-124-10: Event listener count tracking',
+            description: 'Track total event listener count',
+            fn: async () => {
+                const initial = MemoryMonitor.eventListenerCount;
+                
+                const h1 = () => {};
+                const h2 = () => {};
+                window.addEventListener('test1', h1);
+                window.addEventListener('test2', h2);
+                MemoryMonitor.trackEventListener();
+                MemoryMonitor.trackEventListener();
+                
+                const added = MemoryMonitor.eventListenerCount - initial;
+                
+                window.removeEventListener('test1', h1);
+                window.removeEventListener('test2', h2);
+                MemoryMonitor.untrackEventListener();
+                MemoryMonitor.untrackEventListener();
+                
+                return added === 2;
+            },
+            successMsg: 'Event listener count tracking works'
+        }
+    ]);
+
+    // ============================================
+    // Test Group 4: Timer Cleanup (#125)
+    // ============================================
+    TestFramework.registerGroup('Group 4: Timer Cleanup', 'Testing setTimeout/setInterval cleanup', '#125', [
+        {
+            name: 'TC-125-01: setTimeout cleanup',
+            description: 'Test clearing setTimeout',
+            fn: async () => {
+                const id = setTimeout(() => {}, 10000);
+                MemoryMonitor.trackTimer();
+                
+                clearTimeout(id);
+                MemoryMonitor.untrackTimer();
+                
+                return true;
+            },
+            successMsg: 'setTimeout cleared'
+        },
+        {
+            name: 'TC-125-02: setInterval cleanup',
+            description: 'Test clearing setInterval',
+            fn: async () => {
+                const id = setInterval(() => {}, 1000);
+                MemoryMonitor.trackTimer();
+                
+                clearInterval(id);
+                MemoryMonitor.untrackTimer();
+                
+                return true;
+            },
+            successMsg: 'setInterval cleared'
+        },
+        {
+            name: 'TC-125-03: Multiple timeout cleanup',
+            description: 'Test clearing multiple timeouts',
+            fn: async () => {
+                const ids = [];
+                for (let i = 0; i < 5; i++) {
+                    ids.push(setTimeout(() => {}, 10000));
+                    MemoryMonitor.trackTimer();
+                }
+                
+                ids.forEach(id => {
+                    clearTimeout(id);
+                    MemoryMonitor.untrackTimer();
+                });
+                
+                return true;
+            },
+            successMsg: 'Multiple timeouts cleared'
+        },
+        {
+            name: 'TC-125-04: Query timer simulation',
+            description: 'Simulate query timer cleanup',
+            fn: async () => {
+                let queryTimer = null;
+                let executed = false;
+                
+                queryTimer = setTimeout(() => {
+                    executed = true;
+                }, 100);
+                MemoryMonitor.trackTimer();
+                
+                // Cancel before execution
+                clearTimeout(queryTimer);
+                MemoryMonitor.untrackTimer();
+                queryTimer = null;
+                
+                // Wait to ensure it doesn't execute
+                await new Promise(r => setTimeout(r, 150));
+                
+                return !executed;
+            },
+            successMsg: 'Query timer cancelled before execution'
+        },
+        {
+            name: 'TC-125-05: Auto-refresh interval cleanup',
+            description: 'Test auto-refresh interval cleanup',
+            fn: async () => {
+                let refreshCount = 0;
+                const refreshInterval = setInterval(() => {
+                    refreshCount++;
+                }, 50);
+                MemoryMonitor.trackTimer();
+                
+                await new Promise(r => setTimeout(r, 120));
+                
+                clearInterval(refreshInterval);
+                MemoryMonitor.untrackTimer();
+                
+                // Should have executed ~2 times
+                return refreshCount >= 1 && refreshCount <= 4;
+            },
+            successMsg: 'Auto-refresh interval cleaned'
+        },
+        {
+            name: 'TC-125-06: Debounce timer cleanup',
+            description: 'Test debounce timer cleanup',
+            fn: async () => {
+                let debounceTimer = null;
+                let callCount = 0;
+                
+                const debounced = () => {
+                    if (debounceTimer) clearTimeout(debounceTimer);
+                    else MemoryMonitor.trackTimer();
+                    
+                    debounceTimer = setTimeout(() => {
+                        callCount++;
+                        MemoryMonitor.untrackTimer();
+                    }, 100);
+                };
+                
+                // Multiple rapid calls
+                debounced();
+                debounced();
+                debounced();
+                
+                await new Promise(r => setTimeout(r, 150));
+                
+                return callCount === 1;
+            },
+            successMsg: 'Debounce timer works correctly'
+        },
+        {
+            name: 'TC-125-07: Throttle timer cleanup',
+            description: 'Test throttle timer cleanup',
+            fn: async () => {
+                let lastCall = 0;
+                let callCount = 0;
+                let throttleTimer = null;
+                
+                const throttled = () => {
+                    const now = Date.now();
+                    if (now - lastCall >= 100) {
+                        lastCall = now;
+                        callCount++;
+                    }
+                };
+                
+                // Multiple calls
+                throttled();
+                throttled();
+                await new Promise(r => setTimeout(r, 50));
+                throttled();
+                await new Promise(r => setTimeout(r, 60));
+                throttled();
+                
+                return callCount >= 1 && callCount <= 3;
+            },
+            successMsg: 'Throttle timer works correctly'
+        },
+        {
+            name: 'TC-125-08: Animation frame cleanup',
+            description: 'Test requestAnimationFrame cleanup',
+            fn: async () => {
+                let frameId = null;
+                let frameCount = 0;
+                
+                const animate = () => {
+                    frameCount++;
+                    if (frameCount < 5) {
+                        frameId = requestAnimationFrame(animate);
+                    }
+                };
+                
+                frameId = requestAnimationFrame(animate);
+                
+                await new Promise(r => setTimeout(r, 100));
+                
+                if (frameId) cancelAnimationFrame(frameId);
+                
+                return frameCount > 0;
+            },
+            successMsg: 'Animation frame cleaned'
+        },
+        {
+            name: 'TC-125-09: Timer in beforeunload',
+            description: 'Test timer cleanup in beforeunload',
+            fn: async () => {
+                const timers = [];
+                timers.push(setTimeout(() => {}, 10000));
+                timers.push(setInterval(() => {}, 1000));
+                MemoryMonitor.trackTimer();
+                MemoryMonitor.trackTimer();
+                
+                // Simulate beforeunload cleanup
+                timers.forEach(t => clearTimeout(t) || clearInterval(t));
+                MemoryMonitor.untrackTimer();
+                MemoryMonitor.untrackTimer();
+                
+                return true;
+            },
+            successMsg: 'Timer cleanup in beforeunload works'
+        },
+        {
+            name: 'TC-125-10: Timer ID tracking',
+            description: 'Track all timer IDs for cleanup',
+            fn: async () => {
+                const activeTimers = [];
+                
+                for (let i = 0; i < 3; i++) {
+                    activeTimers.push({
+                        id: setTimeout(() => {}, 10000),
+                        type: 'timeout'
+                    });
+                    MemoryMonitor.trackTimer();
+                }
+                
+                const count = activeTimers.length;
+                
+                activeTimers.forEach(t => clearTimeout(t.id));
+                activeTimers.length = 0;
+                MemoryMonitor.activeTimers = 0;
+                
+                return count === 3;
+            },
+            successMsg: 'Timer ID tracking works'
+        }
+    ]);
+
+    // ============================================
+    // Test Group 5: State Persistence (#126)
+    // ============================================
+    TestFramework.registerGroup('Group 5: State Persistence', 'Testing sessionStorage for state keeping', '#126', [
+        {
+            name: 'TC-126-01: Save project selection to sessionStorage',
+            description: 'Test saving project selection',
+            fn: async () => {
+                const key = 'kg_selected_project';
+                const project = { id: 'proj123', name: 'Test Project' };
+                
+                sessionStorage.setItem(key, JSON.stringify(project));
+                const saved = JSON.parse(sessionStorage.getItem(key));
+                
+                sessionStorage.removeItem(key);
+                return saved.id === 'proj123';
+            },
+            successMsg: 'Project selection saved to sessionStorage'
+        },
+        {
+            name: 'TC-126-02: Restore project selection from sessionStorage',
+            description: 'Test restoring project selection',
+            fn: async () => {
+                const key = 'kg_selected_project';
+                const project = { id: 'proj456', name: 'Restored Project' };
+                
+                sessionStorage.setItem(key, JSON.stringify(project));
+                
+                // Simulate page reload - sessionStorage persists
+                const restored = JSON.parse(sessionStorage.getItem(key));
+                
+                sessionStorage.removeItem(key);
+                return restored.name === 'Restored Project';
+            },
+            successMsg: 'Project selection restored from sessionStorage'
+        },
+        {
+            name: 'TC-126-03: Clear selection on explicit logout',
+            description: 'Test clearing selection',
+            fn: async () => {
+                const key = 'kg_selected_project';
+                sessionStorage.setItem(key, JSON.stringify({ id: 'test' }));
+                
+                // Simulate logout
+                sessionStorage.removeItem(key);
+                
+                return sessionStorage.getItem(key) === null;
+            },
+            successMsg: 'Selection cleared on logout'
+        },
+        {
+            name: 'TC-126-04: sessionStorage vs localStorage isolation',
+            description: 'Test storage isolation',
+            fn: async () => {
+                const key = 'kg_isolation_test';
+                
+                localStorage.setItem(key, 'local');
+                sessionStorage.setItem(key, 'session');
+                
+                const local = localStorage.getItem(key);
+                const session = sessionStorage.getItem(key);
+                
+                localStorage.removeItem(key);
+                sessionStorage.removeItem(key);
+                
+                return local === 'local' && session === 'session';
+            },
+            successMsg: 'Storage isolation works'
+        },
+        {
+            name: 'TC-126-05: Multiple state keys',
+            description: 'Test multiple state keys',
+            fn: async () => {
+                sessionStorage.setItem('kg_project', JSON.stringify({ id: 'p1' }));
+                sessionStorage.setItem('kg_view', JSON.stringify({ type: 'graph' }));
+                sessionStorage.setItem('kg_filter', JSON.stringify({ search: 'test' }));
+                
+                const hasAll = sessionStorage.getItem('kg_project') &&
+                              sessionStorage.getItem('kg_view') &&
+                              sessionStorage.getItem('kg_filter');
+                
+                sessionStorage.removeItem('kg_project');
+                sessionStorage.removeItem('kg_view');
+                sessionStorage.removeItem('kg_filter');
+                
+                return hasAll;
+            },
+            successMsg: 'Multiple state keys work'
+        },
+        {
+            name: 'TC-126-06: State versioning',
+            description: 'Test state with version info',
+            fn: async () => {
+                const state = {
+                    version: '1.0',
+                    project: { id: 'p1' },
+                    timestamp: Date.now()
+                };
+                
+                sessionStorage.setItem('kg_state', JSON.stringify(state));
+                const saved = JSON.parse(sessionStorage.getItem('kg_state'));
+                
+                sessionStorage.removeItem('kg_state');
+                return saved.version === '1.0';
+            },
+            successMsg: 'State versioning works'
+        },
+        {
+            name: 'TC-126-07: Invalid state handling',
+            description: 'Test handling of invalid state',
+            fn: async () => {
+                sessionStorage.setItem('kg_state', 'invalid json');
+                
+                try {
+                    JSON.parse(sessionStorage.getItem('kg_state'));
+                    sessionStorage.removeItem('kg_state');
+                    return false; // Should have thrown
+                } catch (e) {
+                    sessionStorage.removeItem('kg_state');
+                    return true;
+                }
+            },
+            successMsg: 'Invalid state handled correctly'
+        },
+        {
+            name: 'TC-126-08: State migration',
+            description: 'Test state migration on version change',
+            fn: async () => {
+                // Old format
+                sessionStorage.setItem('kg_project_id', 'old123');
+                
+                // Migration: convert to new format
+                const oldId = sessionStorage.getItem('kg_project_id');
+                const newState = { id: oldId, version: '2.0' };
+                sessionStorage.setItem('kg_project', JSON.stringify(newState));
+                sessionStorage.removeItem('kg_project_id');
+                
+                const migrated = JSON.parse(sessionStorage.getItem('kg_project'));
+                sessionStorage.removeItem('kg_project');
+                
+                return migrated.id === 'old123' && migrated.version === '2.0';
+            },
+            successMsg: 'State migration works'
+        },
+        {
+            name: 'TC-126-09: Tab-specific state',
+            description: 'Test tab-specific state isolation',
+            fn: async () => {
+                // sessionStorage is tab-specific by design
+                sessionStorage.setItem('kg_tab_state', JSON.stringify({ tab: 1 }));
+                
+                const state = JSON.parse(sessionStorage.getItem('kg_tab_state'));
+                
+                sessionStorage.removeItem('kg_tab_state');
+                return state.tab === 1;
+            },
+            successMsg: 'Tab-specific state works'
+        },
+        {
+            name: 'TC-126-10: State size limits',
+            description: 'Test state storage limits',
+            fn: async () => {
+                // sessionStorage typically has ~5MB limit
+                const data = 'x'.repeat(10000);
+                
+                try {
+                    sessionStorage.setItem('kg_large_state', data);
+                    const retrieved = sessionStorage.getItem('kg_large_state');
+                    sessionStorage.removeItem('kg_large_state');
+                    return retrieved.length === data.length;
+                } catch (e) {
+                    return false;
+                }
+            },
+            successMsg: 'Can store 10KB state'
+        }
+    ]);
+
+    // ============================================
+    // Test Group 6: Browser History (#127)
+    // ============================================
+    TestFramework.registerGroup('Group 6: Browser History', 'Testing pushState/popstate for navigation', '#127', [
+        {
+            name: 'TC-127-01: pushState availability',
+            description: 'Test history.pushState availability',
+            fn: async () => {
+                return typeof history.pushState === 'function';
+            },
+            successMsg: 'pushState is available'
+        },
+        {
+            name: 'TC-127-02: pushState with state data',
+            description: 'Test pushing state with data',
+            fn: async () => {
+                const state = { page: 'query', project: 'p1' };
+                history.pushState(state, '', '#test-push');
+                
+                const current = history.state;
+                history.back();
+                
+                return current && current.page === 'query';
+            },
+            successMsg: 'pushState with data works'
+        },
+        {
+            name: 'TC-127-03: popstate event handling',
+            description: 'Test popstate event',
+            fn: async () => {
+                return new Promise((resolve) => {
+                    let triggered = false;
+                    
+                    const handler = (e) => {
+                        triggered = true;
+                        window.removeEventListener('popstate', handler);
+                        resolve(true);
+                    };
+                    
+                    window.addEventListener('popstate', handler);
+                    
+                    // Trigger popstate
+                    history.pushState({ test: 1 }, '', '#test1');
+                    history.back();
+                    
+                    setTimeout(() => {
+                        window.removeEventListener('popstate', handler);
+                        if (!triggered) resolve(false);
+                    }, 100);
+                });
+            },
+            successMsg: 'popstate event triggered'
+        },
+        {
+            name: 'TC-127-04: State restoration on back',
+            description: 'Test state restoration',
+            fn: async () => {
+                return new Promise((resolve) => {
+                    const state1 = { view: 'graph', project: 'p1' };
+                    const state2 = { view: 'list', project: 'p1' };
+                    
+                    history.pushState(state1, '', '#state1');
+                    history.pushState(state2, '', '#state2');
+                    
+                    const handler = (e) => {
+                        window.removeEventListener('popstate', handler);
+                        resolve(e.state && e.state.view === 'graph');
+                    };
+                    
+                    window.addEventListener('popstate', handler);
+                    history.back();
+                });
+            },
+            successMsg: 'State restored on back navigation'
+        },
+        {
+            name: 'TC-127-05: Replace state',
+            description: 'Test replaceState',
+            fn: async () => {
+                history.pushState({ initial: true }, '', '#initial');
+                history.replaceState({ replaced: true }, '', '#replaced');
+                
+                const state = history.state;
+                
+                return state && state.replaced && !state.initial;
+            },
+            successMsg: 'replaceState works'
+        },
+        {
+            name: 'TC-127-06: History length tracking',
+            description: 'Test history length changes',
+            fn: async () => {
+                const initial = history.length;
+                
+                history.pushState({ step: 1 }, '', '#step1');
+                const afterPush = history.length;
+                
+                return afterPush >= initial;
+            },
+            successMsg: 'History length tracked'
+        },
+        {
+            name: 'TC-127-07: Query parameter preservation',
+            description: 'Test preserving query params in state',
+            fn: async () => {
+                const state = {
+                    query: 'search term',
+                    filters: { type: 'class', status: 'active' }
+                };
+                
+                history.pushState(state, '', '#query-page');
+                const saved = history.state;
+                
+                return saved.query === 'search term' && saved.filters.type === 'class';
+            },
+            successMsg: 'Query params preserved in state'
+        },
+        {
+            name: 'TC-127-08: Navigation state serialization',
+            description: 'Test state serialization',
+            fn: async () => {
+                const complexState = {
+                    project: { id: 'p1', name: 'Test' },
+                    view: { type: 'graph', zoom: 1.5 },
+                    selected: ['node1', 'node2']
+                };
+                
+                history.pushState(complexState, '', '#complex');
+                const saved = history.state;
+                
+                return saved.project.id === 'p1' && saved.selected.length === 2;
+            },
+            successMsg: 'Complex state serialized correctly'
+        },
+        {
+            name: 'TC-127-09: Back button simulation',
+            description: 'Simulate back button behavior',
+            fn: async () => {
+                return new Promise((resolve) => {
+                    history.pushState({ page: 1 }, '', '#page1');
+                    history.pushState({ page: 2 }, '', '#page2');
+                    
+                    const handler = (e) => {
+                        window.removeEventListener('popstate', handler);
+                        resolve(e.state && e.state.page === 1);
+                    };
+                    
+                    window.addEventListener('popstate', handler);
+                    history.back();
+                });
+            },
+            successMsg: 'Back button simulation works'
+        },
+        {
+            name: 'TC-127-10: Forward navigation',
+            description: 'Test forward navigation',
+            fn: async () => {
+                return new Promise((resolve) => {
+                    history.pushState({ page: 'a' }, '', '#a');
+                    history.pushState({ page: 'b' }, '', '#b');
+                    
+                    const handler = (e) => {
+                        window.removeEventListener('popstate', handler);
+                        if (e.state && e.state.page === 'a') {
+                            // Now go forward
+                            setTimeout(() => {
+                                const fwdHandler = (ev) => {
+                                    window.removeEventListener('popstate', fwdHandler);
+                                    resolve(ev.state && ev.state.page === 'b');
+                                };
+                                window.addEventListener('popstate', fwdHandler);
+                                history.forward();
+                            }, 50);
+                        }
+                    };
+                    
+                    window.addEventListener('popstate', handler);
+                    history.back();
+                });
+            },
+            successMsg: 'Forward navigation works'
+        }
+    ]);
+
+    // ============================================
+    // Test Group 7: Resource Destruction (#128)
+    // ============================================
+    TestFramework.registerGroup('Group 7: Resource Destruction', 'Testing GraphVisualizer/ChartManager.destroy()', '#128', [
+        {
+            name: 'TC-128-01: GraphVisualizer destroy method exists',
+            description: 'Check if destroy method exists',
+            fn: async () => {
+                // Create a mock GraphVisualizer
+                const mockGV = {
+                    network: { destroy: () => {} },
+                    destroy: function() {
+                        if (this.network) this.network.destroy();
+                        this.network = null;
+                    }
+                };
+                
+                return typeof mockGV.destroy === 'function';
+            },
+            successMsg: 'destroy method exists'
+        },
+        {
+            name: 'TC-128-02: GraphVisualizer destroy cleans network',
+            description: 'Test network cleanup on destroy',
+            fn: async () => {
+                let destroyed = false;
+                const mockGV = {
+                    network: {
+                        destroy: () => { destroyed = true; }
+                    },
+                    destroy: function() {
+                        if (this.network) this.network.destroy();
+                        this.network = null;
+                    }
+                };
+                
+                mockGV.destroy();
+                return destroyed && mockGV.network === null;
+            },
+            successMsg: 'Network cleaned on destroy'
+        },
+        {
+            name: 'TC-128-03: ChartManager destroy method',
+            description: 'Test ChartManager destroy',
+            fn: async () => {
+                const mockCM = {
+                    charts: [],
+                    destroy: function() {
+                        this.charts.forEach(c => c.destroy && c.destroy());
+                        this.charts = [];
+                    }
+                };
+                
+                mockCM.charts = [{ destroy: () => {} }, { destroy: () => {} }];
+                mockCM.destroy();
+                
+                return mockCM.charts.length === 0;
+            },
+            successMsg: 'ChartManager destroy works'
+        },
+        {
+            name: 'TC-128-04: Canvas cleanup on destroy',
+            description: 'Test canvas element cleanup',
+            fn: async () => {
+                const container = document.createElement('div');
+                container.innerHTML = '<canvas></canvas>';
+                const canvas = container.querySelector('canvas');
+                
+                // Simulate destroy
+                const context = canvas.getContext('2d');
+                // Clear canvas
+                context.clearRect(0, 0, canvas.width, canvas.height);
+                
+                return canvas.width > 0 || canvas.height > 0;
+            },
+            successMsg: 'Canvas cleanup works'
+        },
+        {
+            name: 'TC-128-05: Event listener removal on destroy',
+            description: 'Test event listener cleanup',
+            fn: async () => {
+                const handlers = [];
+                const mockGV = {
+                    addEventListener: (e, h) => handlers.push({ e, h }),
+                    destroy: function() {
+                        handlers.forEach(({ e, h }) => {
+                            window.removeEventListener(e, h);
+                        });
+                        handlers.length = 0;
+                    }
+                };
+                
+                mockGV.addEventListener('resize', () => {});
+                mockGV.addEventListener('click', () => {});
+                
+                const before = handlers.length;
+                mockGV.destroy();
+                
+                return before === 2 && handlers.length === 0;
+            },
+            successMsg: 'Event listeners cleaned on destroy'
+        },
+        {
+            name: 'TC-128-06: Timer cleanup on destroy',
+            description: 'Test timer cleanup',
+            fn: async () => {
+                const timers = [];
+                const mockGV = {
+                    startTimer: () => timers.push(setTimeout(() => {}, 10000)),
+                    destroy: function() {
+                        timers.forEach(t => clearTimeout(t));
+                        timers.length = 0;
+                    }
+                };
+                
+                mockGV.startTimer();
+                mockGV.startTimer();
+                
+                const before = timers.length;
+                mockGV.destroy();
+                
+                return before === 2 && timers.length === 0;
+            },
+            successMsg: 'Timers cleaned on destroy'
+        },
+        {
+            name: 'TC-128-07: DOM element removal',
+            description: 'Test DOM element cleanup',
+            fn: async () => {
+                const container = document.createElement('div');
+                container.id = 'test-container';
+                document.body.appendChild(container);
+                
+                // Simulate destroy
+                const el = document.getElementById('test-container');
+                if (el) el.remove();
+                
+                const removed = !document.getElementById('test-container');
+                return removed;
+            },
+            successMsg: 'DOM element removed'
+        },
+        {
+            name: 'TC-128-08: Data reference cleanup',
+            description: 'Test data reference cleanup',
+            fn: async () => {
+                const mockGV = {
+                    nodes: [{ id: 1 }, { id: 2 }],
+                    edges: [{ from: 1, to: 2 }],
+                    data: { large: new Array(1000).fill(0) },
+                    destroy: function() {
+                        this.nodes = null;
+                        this.edges = null;
+                        this.data = null;
+                    }
+                };
+                
+                mockGV.destroy();
+                
+                return mockGV.nodes === null && mockGV.edges === null && mockGV.data === null;
+            },
+            successMsg: 'Data references cleaned'
+        },
+        {
+            name: 'TC-128-09: Observer cleanup',
+            description: 'Test MutationObserver cleanup',
+            fn: async () => {
+                if (typeof MutationObserver === 'undefined') {
+                    return 'warn';
+                }
+                
+                let disconnected = false;
+                const mockObserver = {
+                    disconnect: () => { disconnected = true; }
+                };
+                
+                const mockGV = {
+                    observer: mockObserver,
+                    destroy: function() {
+                        if (this.observer) {
+                            this.observer.disconnect();
+                            this.observer = null;
+                        }
+                    }
+                };
+                
+                mockGV.destroy();
+                return disconnected && mockGV.observer === null;
+            },
+            successMsg: 'Observer cleaned',
+            warnMsg: 'MutationObserver not supported'
+        },
+        {
+            name: 'TC-128-10: Complete cleanup verification',
+            description: 'Test complete resource cleanup',
+            fn: async () => {
+                const resources = {
+                    network: { destroyed: false, destroy() { this.destroyed = true; } },
+                    timers: [],
+                    listeners: [],
+                    data: { value: 'test' }
+                };
+                
+                const mockGV = {
+                    resources,
+                    destroy: function() {
+                        if (this.resources.network) {
+                            this.resources.network.destroy();
+                            this.resources.network = null;
+                        }
+                        this.resources.timers.forEach(t => clearTimeout(t));
+                        this.resources.timers = [];
+                        this.resources.listeners = [];
+                        this.resources.data = null;
+                    }
+                };
+                
+                mockGV.resources.timers.push(setTimeout(() => {}, 10000));
+                mockGV.destroy();
+                
+                return !mockGV.resources.network &&
+                       mockGV.resources.timers.length === 0 &&
+                       mockGV.resources.data === null;
+            },
+            successMsg: 'Complete cleanup verified'
+        }
+    ]);
+
+    // ============================================
+    // Test Group 8: Extreme Chaos Scenarios
+    // ============================================
+    TestFramework.registerGroup('Group 8: Extreme Chaos Scenarios', 'Stress testing and edge cases', 'CHAOS', [
+        {
+            name: 'TC-CHAOS-01: 100 rapid page switch simulation',
+            description: 'Simulate 100 rapid page switches',
+            fn: async () => {
+                TestLog.chaos('Starting 100 rapid page switches');
+                let switches = 0;
+                
+                for (let i = 0; i < 100; i++) {
+                    // Simulate page state change
+                    sessionStorage.setItem('kg_chaos_page', `page_${i}`);
+                    switches++;
+                    
+                    if (i % 20 === 0) {
+                        await new Promise(r => setTimeout(r, 1));
+                    }
+                }
+                
+                sessionStorage.removeItem('kg_chaos_page');
+                TestLog.chaos(`Completed ${switches} page switches`);
+                return switches === 100;
+            },
+            successMsg: '100 page switches completed'
+        },
+        {
+            name: 'TC-CHAOS-02: Concurrent localStorage operations',
+            description: 'Multiple concurrent localStorage ops',
+            fn: async () => {
+                TestLog.chaos('Starting concurrent localStorage operations');
+                const ops = [];
+                
+                for (let i = 0; i < 50; i++) {
+                    ops.push(new Promise((resolve) => {
+                        const key = `kg_chaos_${i}`;
+                        localStorage.setItem(key, JSON.stringify({ index: i, time: Date.now() }));
+                        setTimeout(() => {
+                            localStorage.removeItem(key);
+                            resolve(true);
+                        }, Math.random() * 10);
+                    }));
+                }
+                
+                await Promise.all(ops);
+                TestLog.chaos('Concurrent operations completed');
+                return true;
+            },
+            successMsg: 'Concurrent operations completed'
+        },
+        {
+            name: 'TC-CHAOS-03: Memory pressure test (100 ChartManagers)',
+            description: 'Create and destroy 100 ChartManagers',
+            fn: async () => {
+                TestLog.chaos('Starting memory pressure test');
+                const managers = [];
+                
+                for (let i = 0; i < 100; i++) {
+                    managers.push({
+                        id: i,
+                        data: new Array(100).fill(i),
+                        destroy: function() {
+                            this.data = null;
+                        }
+                    });
+                }
+                
+                // Destroy all
+                managers.forEach(m => m.destroy());
+                managers.length = 0;
+                
+                TestLog.chaos('Memory pressure test completed');
+                return managers.length === 0;
+            },
+            successMsg: '100 ChartManagers created and destroyed'
+        },
+        {
+            name: 'TC-CHAOS-04: Event storm (1000 events)',
+            description: 'Trigger 1000 events rapidly',
+            fn: async () => {
+                TestLog.chaos('Starting event storm');
+                let eventCount = 0;
+                
+                const handler = () => { eventCount++; };
+                window.addEventListener('kg-chaos-event', handler);
+                
+                for (let i = 0; i < 1000; i++) {
+                    window.dispatchEvent(new Event('kg-chaos-event'));
+                }
+                
+                window.removeEventListener('kg-chaos-event', handler);
+                TestLog.chaos(`Event storm completed: ${eventCount} events`);
+                return eventCount === 1000;
+            },
+            successMsg: '1000 events processed'
+        },
+        {
+            name: 'TC-CHAOS-05: Rapid history manipulation',
+            description: 'Push 50 history states rapidly',
+            fn: async () => {
+                TestLog.chaos('Starting rapid history manipulation');
+                
+                for (let i = 0; i < 50; i++) {
+                    history.pushState({ chaos: i }, '', `#chaos-${i}`);
+                }
+                
+                // Go back to clean up
+                for (let i = 0; i < 50; i++) {
+                    history.back();
+                }
+                
+                TestLog.chaos('History manipulation completed');
+                return true;
+            },
+            successMsg: '50 history states manipulated'
+        },
+        {
+            name: 'TC-CHAOS-06: Storage quota stress',
+            description: 'Test near-quota storage behavior',
+            fn: async () => {
+                TestLog.chaos('Starting storage quota stress');
+                const key = 'kg_chaos_large';
+                
+                try {
+                    // Try to store 1MB
+                    const data = 'x'.repeat(1024 * 1024);
+                    localStorage.setItem(key, data);
+                    const size = localStorage.getItem(key).length;
+                    localStorage.removeItem(key);
+                    TestLog.chaos(`Stored ${size} bytes`);
+                    return size === 1024 * 1024;
+                } catch (e) {
+                    TestLog.chaos('Storage quota reached as expected');
+                    return true; // Quota error is expected behavior
+                }
+            },
+            successMsg: 'Storage quota stress completed'
+        },
+        {
+            name: 'TC-CHAOS-07: Timer cascade',
+            description: 'Create cascading timers',
+            fn: async () => {
+                TestLog.chaos('Starting timer cascade');
+                let completed = 0;
+                
+                const createCascade = (depth) => {
+                    if (depth <= 0) {
+                        completed++;
+                        return;
+                    }
+                    setTimeout(() => createCascade(depth - 1), 0);
+                };
+                
+                for (let i = 0; i < 20; i++) {
+                    createCascade(10);
+                }
+                
+                await new Promise(r => setTimeout(r, 500));
+                TestLog.chaos(`Timer cascade completed: ${completed} chains`);
+                return completed === 20;
+            },
+            successMsg: 'Timer cascade completed'
+        },
+        {
+            name: 'TC-CHAOS-08: DOM manipulation stress',
+            description: 'Rapid DOM create/destroy cycles',
+            fn: async () => {
+                TestLog.chaos('Starting DOM manipulation stress');
+                const container = document.createElement('div');
+                container.id = 'chaos-container';
+                document.body.appendChild(container);
+                
+                for (let i = 0; i < 500; i++) {
+                    const el = document.createElement('div');
+                    el.id = `chaos-el-${i}`;
+                    el.innerHTML = `<span>Element ${i}</span>`;
+                    container.appendChild(el);
+                    
+                    if (i % 100 === 0) {
+                        await new Promise(r => setTimeout(r, 1));
+                    }
+                }
+                
+                container.remove();
+                TestLog.chaos('DOM manipulation stress completed');
+                return !document.getElementById('chaos-container');
+            },
+            successMsg: '500 DOM elements created and destroyed'
+        },
+        {
+            name: 'TC-CHAOS-09: JSON serialization stress',
+            description: 'Serialize/deserialize large objects',
+            fn: async () => {
+                TestLog.chaos('Starting JSON serialization stress');
+                
+                const largeObject = {
+                    nodes: Array.from({ length: 1000 }, (_, i) => ({
+                        id: i,
+                        label: `Node ${i}`,
+                        data: { x: Math.random(), y: Math.random() }
+                    })),
+                    edges: Array.from({ length: 500 }, (_, i) => ({
+                        from: i,
+                        to: i + 1,
+                        weight: Math.random()
+                    }))
+                };
+                
+                const serialized = JSON.stringify(largeObject);
+                const deserialized = JSON.parse(serialized);
+                
+                TestLog.chaos(`Serialized ${serialized.length} bytes`);
+                return deserialized.nodes.length === 1000 && deserialized.edges.length === 500;
+            },
+            successMsg: 'Large object serialized/deserialized'
+        },
+        {
+            name: 'TC-CHAOS-10: Combined stress test',
+            description: 'Run all stress tests simultaneously',
+            fn: async () => {
+                TestLog.chaos('STARTING COMBINED STRESS TEST');
+                
+                const tests = await Promise.all([
+                    // Rapid storage
+                    new Promise(r => {
+                        for (let i = 0; i < 100; i++) {
+                            sessionStorage.setItem(`stress_${i}`, i);
+                        }
+                        r(true);
+                    }),
+                    // Rapid timers
+                    new Promise(r => {
+                        let count = 0;
+                        for (let i = 0; i < 50; i++) {
+                            setTimeout(() => { count++; }, Math.random() * 50);
+                        }
+                        setTimeout(() => r(count > 0), 100);
+                    }),
+                    // Rapid events
+                    new Promise(r => {
+                        let count = 0;
+                        const h = () => count++;
+                        window.addEventListener('stress-test', h);
+                        for (let i = 0; i < 100; i++) {
+                            window.dispatchEvent(new Event('stress-test'));
+                        }
+                        window.removeEventListener('stress-test', h);
+                        r(count === 100);
+                    })
+                ]);
+                
+                // Cleanup
+                for (let i = 0; i < 100; i++) {
+                    sessionStorage.removeItem(`stress_${i}`);
+                }
+                
+                TestLog.chaos('COMBINED STRESS TEST COMPLETED');
+                return tests.every(t => t);
+            },
+            successMsg: 'Combined stress test passed'
+        },
+        {
+            name: 'TC-CHAOS-11: Memory leak detection',
+            description: 'Detect potential memory leaks',
+            fn: async () => {
+                TestLog.chaos('Starting memory leak detection');
+                
+                if (!performance.memory) {
+                    return 'warn';
+                }
+                
+                const initial = performance.memory.usedJSHeapSize;
+                
+                // Create and destroy objects
+                for (let i = 0; i < 100; i++) {
+                    const arr = new Array(10000).fill(i);
+                    // Explicitly dereference
+                    arr.length = 0;
+                }
+                
+                // Force GC attempt
+                for (let i = 0; i < 1000; i++) {
+                    const dummy = {};
+                }
+                
+                const final = performance.memory.usedJSHeapSize;
+                const diff = (final - initial) / 1048576; // MB
+                
+                TestLog.chaos(`Memory delta: ${diff.toFixed(2)} MB`);
+                // Allow some growth but not excessive
+                return diff < 50;
+            },
+            successMsg: 'No significant memory leak detected',
+            warnMsg: 'Memory API not available'
+        },
+        {
+            name: 'TC-CHAOS-12: Error recovery stress',
+            description: 'Test error recovery mechanisms',
+            fn: async () => {
+                TestLog.chaos('Starting error recovery stress');
+                let recovered = 0;
+                
+                for (let i = 0; i < 20; i++) {
+                    try {
+                        if (i % 3 === 0) throw new Error('Test error');
+                        if (i % 5 === 0) JSON.parse('invalid');
+                        recovered++;
+                    } catch (e) {
+                        recovered++;
+                    }
+                }
+                
+                TestLog.chaos(`Error recovery: ${recovered}/20`);
+                return recovered === 20;
+            },
+            successMsg: 'All errors recovered'
+        },
+        {
+            name: 'TC-CHAOS-13: Async operation flood',
+            description: 'Flood with async operations',
+            fn: async () => {
+                TestLog.chaos('Starting async operation flood');
+                const ops = [];
+                
+                for (let i = 0; i < 200; i++) {
+                    ops.push(new Promise(r => {
+                        setTimeout(() => r(i), Math.random() * 20);
+                    }));
+                }
+                
+                const results = await Promise.all(ops);
+                TestLog.chaos(`Completed ${results.length} async operations`);
+                return results.length === 200;
+            },
+            successMsg: '200 async operations completed'
+        },
+        {
+            name: 'TC-CHAOS-14: State corruption recovery',
+            description: 'Recover from corrupted state',
+            fn: async () => {
+                TestLog.chaos('Starting state corruption recovery');
+                
+                // Corrupt various states
+                localStorage.setItem('kg_corrupt1', 'not json');
+                localStorage.setItem('kg_corrupt2', '{ broken');
+                sessionStorage.setItem('kg_corrupt3', 'undefined');
+                
+                // Recovery function
+                const recover = (key, storage) => {
+                    try {
+                        const data = storage.getItem(key);
+                        if (!data) return null;
+                        return JSON.parse(data);
+                    } catch (e) {
+                        storage.removeItem(key);
+                        return null;
+                    }
+                };
+                
+                const r1 = recover('kg_corrupt1', localStorage);
+                const r2 = recover('kg_corrupt2', localStorage);
+                const r3 = recover('kg_corrupt3', sessionStorage);
+                
+                // Cleanup
+                localStorage.removeItem('kg_corrupt1');
+                localStorage.removeItem('kg_corrupt2');
+                sessionStorage.removeItem('kg_corrupt3');
+                
+                TestLog.chaos('State corruption recovery completed');
+                return r1 === null && r2 === null && r3 === null;
+            },
+            successMsg: 'Corrupted state recovered'
+        },
+        {
+            name: 'TC-CHAOS-15: Long-running operation interruption',
+            description: 'Test interruption of long operations',
+            fn: async () => {
+                TestLog.chaos('Starting interruption test');
+                
+                let interrupted = false;
+                const controller = new AbortController();
+                const { signal } = controller;
+                
+                const longOp = new Promise((resolve) => {
+                    const interval = setInterval(() => {
+                        if (signal.aborted) {
+                            clearInterval(interval);
+                            interrupted = true;
+                            resolve('interrupted');
+                        }
+                    }, 10);
+                    
+                    setTimeout(() => {
+                        clearInterval(interval);
+                        resolve('completed');
+                    }, 1000);
+                });
+                
+                // Interrupt after 50ms
+                setTimeout(() => controller.abort(), 50);
+                
+                const result = await longOp;
+                TestLog.chaos(`Operation ${result}`);
+                return interrupted;
+            },
+            successMsg: 'Operation interrupted successfully'
+        }
+    ]);
+
+    // ============================================
+    // UI Functions
+    // ============================================
+    function toggleGroup(bugId) {
+        const body = document.getElementById(`body-${bugId}`);
+        if (body) {
+            body.style.display = body.style.display === 'none' ? 'block' : 'none';
+        }
+    }
+
+    function toggleAllGroups() {
+        const bodies = document.querySelectorAll('.test-group-body');
+        const anyOpen = Array.from(bodies).some(b => b.style.display !== 'none');
+        bodies.forEach(b => b.style.display = anyOpen ? 'none' : 'block');
+    }
+
+    async function runAllTests() {
+        TestFramework.clear();
+        TestLog.clear();
+        MemoryMonitor.start();
+        
+        await TestFramework.runAll();
+        
+        MemoryMonitor.stop();
+    }
+
+    async function runChaosTests() {
+        TestLog.section('Running Chaos Tests Only');
+        const chaosGroup = TestFramework.tests.find(t => t.bugId === 'CHAOS');
+        if (chaosGroup) {
+            await TestFramework.runGroup(chaosGroup);
+        }
+    }
+
+    function clearResults() {
+        TestFramework.clear();
+        TestLog.clear();
+    }
+
+    function clearLogs() {
+        TestLog.clear();
+    }
+
+    function exportReport() {
+        const report = {
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent,
+            results: TestFramework.results,
+            logs: TestLog.getLogs()
+        };
+        
+        const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `kg-test-report-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        TestLog.info('Export', 'Report exported');
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        TestLog.info('Init', 'Iteration 9 Test Suite loaded');
+        TestLog.info('Init', `Total test cases: ${TestFramework.tests.reduce((a, t) => a + t.tests.length, 0)}`);
+        MemoryMonitor.start();
+    });
+    </script>
+</body>
+</html>

@@ -30,16 +30,28 @@ function initDashboard() {
     // Initialize chart manager
     chartManager = new ChartManager();
     KGLog.info('initDashboard', 'ChartManager created');
-    
+
     // Initialize overview graph
     initOverviewGraph();
-    
+
     // Initialize charts
     initCharts();
-    
+
     // Setup event listeners
     setupEventListeners();
-    
+
+    // Bug #126 fix: 恢复项目选择
+    const savedProject = sessionStorage.getItem('kg_selected_project');
+    if (savedProject) {
+        const projectSelect = document.getElementById('projectSelect');
+        if (projectSelect) {
+            projectSelect.value = savedProject;
+        }
+        loadProject(savedProject);
+    } else {
+        loadProject('demo');
+    }
+
     // Animate stats
     animateStats();
     KGLog.exit('initDashboard', 'Dashboard initialized');
@@ -127,7 +139,10 @@ function setupEventListeners() {
     const projectSelect = document.getElementById('projectSelect');
     if (projectSelect) {
         projectSelect.addEventListener('change', (e) => {
-            loadProject(e.target.value);
+            const projectId = e.target.value;
+            // Bug #126 fix: 保存项目选择到sessionStorage
+            sessionStorage.setItem('kg_selected_project', projectId);
+            loadProject(projectId);
         });
         KGLog.info('setupEventListeners', 'Project selector listener attached');
     } else {
@@ -569,6 +584,19 @@ const resizeHandler = debounce(() => {
     }
 }, 250);
 window.addEventListener('resize', resizeHandler);
+
+// Bug #128 fix: Cleanup GraphVisualizer on page unload
+window.addEventListener('beforeunload', () => {
+    if (graphVisualizer) {
+        graphVisualizer.destroy();
+        graphVisualizer = null;
+    }
+    if (chartManager) {
+        chartManager.destroy();
+        chartManager = null;
+    }
+    window.removeEventListener('resize', resizeHandler);
+});
 
 // Export functions for global access
 window.initDashboard = initDashboard;
