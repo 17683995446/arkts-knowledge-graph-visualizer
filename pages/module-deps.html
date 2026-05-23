@@ -555,6 +555,7 @@
     <script src="../js/charts.js?v=50"></script>
     <script>
         let depGraphVisualizer = null;
+        let chordChartManager = null;
         let currentView = 'network';
 
         // 初始化页面
@@ -624,14 +625,18 @@
 
         // 初始化弦图
         function initChordView() {
+            if (chordChartManager) {
+                chordChartManager.destroy();
+                chordChartManager = null;
+            }
             const data = KGData.moduleDeps;
             const modules = data.modules.map(m => m.name);
-            
+
             // Create adjacency matrix
-            const matrix = Array(modules.length).fill(null).map(() => 
+            const matrix = Array(modules.length).fill(null).map(() =>
                 Array(modules.length).fill(0)
             );
-            
+
             data.dependencies.forEach(dep => {
                 const fromIdx = modules.indexOf(dep.from);
                 const toIdx = modules.indexOf(dep.to);
@@ -640,8 +645,8 @@
                 }
             });
 
-            const chartManager = new ChartManager();
-            chartManager.createChordDiagram('moduleDepGraph', matrix, modules);
+            chordChartManager = new ChartManager();
+            chordChartManager.createChordDiagram('moduleDepGraph', matrix, modules);
         }
 
         // 初始化矩阵视图
@@ -687,6 +692,13 @@
             if (depGraphVisualizer && currentView === 'network') {
                 depGraphVisualizer.focusNode(moduleName);
                 depGraphVisualizer.highlightConnected(moduleName);
+            } else {
+                // Bug #116 fix: Show toast feedback for non-network modes
+                const toast = document.createElement('div');
+                toast.style.cssText = 'position:fixed;top:20px;right:20px;padding:12px 20px;color:white;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;animation:slideIn 0.3s ease;max-width:400px;background:#3b82f6;';
+                toast.textContent = `聚焦模块: ${moduleName}（请切换到网络图查看）`;
+                document.body.appendChild(toast);
+                setTimeout(() => { toast.style.animation = 'slideOut 0.3s ease'; setTimeout(() => toast.remove(), 300); }, 2000);
             }
         }
 
@@ -708,6 +720,23 @@
                 depGraphVisualizer.fit();
             }
         }
+
+        // Bug #117 fix: Add resize handler
+        function debounce(fn, delay) {
+            let timer = null;
+            const debounced = function(...args) {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn.apply(this, args), delay);
+            };
+            debounced.cancel = function() { clearTimeout(timer); timer = null; };
+            return debounced;
+        }
+
+        window.addEventListener('resize', debounce(() => {
+            if (depGraphVisualizer && currentView === 'network') {
+                depGraphVisualizer.fit();
+            }
+        }, 250));
     </script>
 </body>
 </html>

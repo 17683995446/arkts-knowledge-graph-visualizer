@@ -535,16 +535,18 @@
     <script src="../js/data.js"></script>
     <script src="../js/charts.js?v=50"></script>
     <script>
-        // 初始化页面
+        let _statsChartManager = null;
+
         document.addEventListener('DOMContentLoaded', function() {
             initCharts();
         });
 
         function initCharts() {
-            const chartManager = new ChartManager();
+            _statsChartManager = new ChartManager();
+            window._statsChartManager = _statsChartManager;
 
             // 语言分布柱状图
-            chartManager.createBarChart('languageChart', [
+            _statsChartManager.createBarChart('languageChart', [
                 { name: 'ArkTS', value: 85432, color: '#4CAF50' },
                 { name: 'TypeScript', value: 45678, color: '#2196F3' },
                 { name: 'JavaScript', value: 18900, color: '#FF9800' },
@@ -552,22 +554,20 @@
                 { name: 'CSS', value: 2222, color: '#00BCD4' }
             ], { height: 260 });
 
-            // 复杂度分布饼图
+            // 复杂度分布
             const complexityData = [
                 { type: '低复杂度', count: 1456, color: '#10b981' },
                 { type: '中等', count: 567, color: '#f59e0b' },
                 { type: '高复杂度', count: 89, color: '#ef4444' },
                 { type: '极高', count: 12, color: '#7c2d12' }
             ];
-            
-            // Create custom complexity chart
             createComplexityChart('complexityChart', complexityData);
 
             // 增长趋势图
-            chartManager.createLineChart('growthChart', KGData.codeTrend);
+            _statsChartManager.createLineChart('growthChart', KGData.codeTrend);
 
             // 提交统计柱状图
-            chartManager.createBarChart('commitChart', [
+            _statsChartManager.createBarChart('commitChart', [
                 { name: '周一', value: 12, color: '#3b82f6' },
                 { name: '周二', value: 19, color: '#3b82f6' },
                 { name: '周三', value: 15, color: '#3b82f6' },
@@ -579,13 +579,11 @@
         }
 
         function createComplexityChart(containerId, data) {
-            const container = d3.select(`#${containerId}`);
+            const container = d3.select('#' + containerId);
             const containerNode = container.node();
-            // Bug #54修复: 添加容器null检查
             if (!containerNode) { console.warn('createComplexityChart: container not found'); return; }
             container.selectAll('*').remove();
 
-            // Bug #64修复: 防止width为0导致负radius
             let width = containerNode.getBoundingClientRect().width;
             width = Math.max(width, 300);
             const height = 260;
@@ -595,20 +593,12 @@
                 .attr('width', width)
                 .attr('height', height)
                 .append('g')
-                .attr('transform', `translate(${width / 2},${height / 2})`);
+                .attr('transform', 'translate(' + (width / 2) + ',' + (height / 2) + ')');
 
-            const pie = d3.pie()
-                .value(d => d.count)
-                .sort(null);
+            const pie = d3.pie().value(d => d.count).sort(null);
+            const arc = d3.arc().innerRadius(radius * 0.5).outerRadius(radius);
 
-            const arc = d3.arc()
-                .innerRadius(radius * 0.5)
-                .outerRadius(radius);
-
-            const arcs = svg.selectAll('arc')
-                .data(pie(data))
-                .enter()
-                .append('g');
+            const arcs = svg.selectAll('arc').data(pie(data)).enter().append('g');
 
             arcs.append('path')
                 .attr('d', arc)
@@ -616,45 +606,102 @@
                 .attr('stroke', '#1e293b')
                 .attr('stroke-width', 2);
 
-            // Add labels
-            const labelArc = d3.arc()
-                .innerRadius(radius * 0.7)
-                .outerRadius(radius * 0.7);
-
+            const labelArc = d3.arc().innerRadius(radius * 0.7).outerRadius(radius * 0.7);
             arcs.append('text')
-                .attr('transform', d => `translate(${labelArc.centroid(d)})`)
+                .attr('transform', d => 'translate(' + labelArc.centroid(d) + ')')
                 .attr('text-anchor', 'middle')
                 .text(d => d.data.count)
                 .style('fill', '#f1f5f9')
                 .style('font-size', '12px')
                 .style('font-weight', 'bold');
 
-            // Center text
             const total = data.reduce((sum, d) => sum + d.count, 0);
-            
-            svg.append('text')
-                .attr('text-anchor', 'middle')
-                .attr('dy', '-0.2em')
-                .text(total)
-                .style('font-size', '24px')
-                .style('font-weight', 'bold')
-                .style('fill', '#f1f5f9');
-
-            svg.append('text')
-                .attr('text-anchor', 'middle')
-                .attr('dy', '1.2em')
-                .text('Functions')
-                .style('font-size', '12px')
-                .style('fill', '#94a3b8');
+            svg.append('text').attr('text-anchor', 'middle').attr('dy', '-0.2em')
+                .text(total).style('font-size', '24px').style('font-weight', 'bold').style('fill', '#f1f5f9');
+            svg.append('text').attr('text-anchor', 'middle').attr('dy', '1.2em')
+                .text('Functions').style('font-size', '12px').style('fill', '#94a3b8');
         }
 
-        // Time selector handlers
+        // Bug #118 fix: Time selector handlers with actual chart updates
         document.querySelectorAll('.time-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 this.parentElement.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
                 this.classList.add('active');
+                const period = this.textContent.trim();
+                updateChartsForPeriod(period);
             });
         });
+
+        function updateChartsForPeriod(period) {
+            const trendData = {
+                '7天': KGData.codeTrend || [
+                    { date: '2024-01-15', lines: 145200, files: 1180, commits: 12 },
+                    { date: '2024-01-16', lines: 145800, files: 1185, commits: 19 },
+                    { date: '2024-01-17', lines: 146300, files: 1190, commits: 15 },
+                    { date: '2024-01-18', lines: 147100, files: 1200, commits: 25 },
+                    { date: '2024-01-19', lines: 148000, files: 1210, commits: 22 },
+                    { date: '2024-01-20', lines: 148200, files: 1212, commits: 8 },
+                    { date: '2024-01-21', lines: 148500, files: 1215, commits: 5 }
+                ],
+                '30天': [
+                    { date: '2024-01-01', lines: 130000, files: 1050, commits: 45 },
+                    { date: '2024-01-08', lines: 138000, files: 1120, commits: 52 },
+                    { date: '2024-01-15', lines: 145200, files: 1180, commits: 48 },
+                    { date: '2024-01-22', lines: 152000, files: 1247, commits: 55 }
+                ],
+                '90天': [
+                    { date: '2023-11-01', lines: 95000, files: 780, commits: 120 },
+                    { date: '2023-12-01', lines: 115000, files: 920, commits: 145 },
+                    { date: '2024-01-01', lines: 130000, files: 1050, commits: 130 },
+                    { date: '2024-01-22', lines: 156400, files: 1247, commits: 155 }
+                ]
+            };
+
+            const commitData = {
+                '本周': [
+                    { name: '周一', value: 12, color: '#3b82f6' },
+                    { name: '周二', value: 19, color: '#3b82f6' },
+                    { name: '周三', value: 15, color: '#3b82f6' },
+                    { name: '周四', value: 25, color: '#3b82f6' },
+                    { name: '周五', value: 22, color: '#3b82f6' },
+                    { name: '周六', value: 8, color: '#3b82f6' },
+                    { name: '周日', value: 5, color: '#3b82f6' }
+                ],
+                '本月': [
+                    { name: '第1周', value: 85, color: '#3b82f6' },
+                    { name: '第2周', value: 92, color: '#3b82f6' },
+                    { name: '第3周', value: 78, color: '#3b82f6' },
+                    { name: '第4周', value: 105, color: '#3b82f6' }
+                ]
+            };
+
+            const growthData = trendData[period];
+            if (growthData && _statsChartManager) {
+                _statsChartManager.createLineChart('growthChart', growthData);
+            }
+
+            const commitPeriod = period === '7天' ? '本周' : period === '30天' ? '本月' : null;
+            if (commitPeriod && commitData[commitPeriod] && _statsChartManager) {
+                _statsChartManager.createBarChart('commitChart', commitData[commitPeriod], { height: 260 });
+            }
+        }
+
+        // Bug #120 fix: Add resize handler
+        function debounce(fn, delay) {
+            let timer = null;
+            const debounced = function(...args) {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn.apply(this, args), delay);
+            };
+            debounced.cancel = function() { clearTimeout(timer); timer = null; };
+            return debounced;
+        }
+
+        window.addEventListener('resize', debounce(function() {
+            if (_statsChartManager) {
+                initCharts();
+            }
+        }, 250));
     </script>
 </body>
 </html>

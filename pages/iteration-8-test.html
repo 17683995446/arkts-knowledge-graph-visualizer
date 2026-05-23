@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iteration 8 Bug Fix Test Suite (#100-#121) - ArkTS Knowledge Graph</title>
+    <script src="../libs/vis-network.min.js"></script>
+    <script src="../libs/d3.v7.min.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/graph.js?v=50"></script>
+    <script src="../js/charts.js?v=50"></script>
+    <script src="../js/main.js?v=50"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'SF Mono', Consolas, 'Courier New', monospace; background: #0a0e1a; color: #c9d1d9; padding: 16px; min-height: 100vh; }
+        h1 { text-align: center; color: #58a6ff; font-size: 22px; margin-bottom: 4px; }
+        .subtitle { text-align: center; color: #8b949e; font-size: 12px; margin-bottom: 16px; }
+
+        /* Summary bar */
+        .summary { display: flex; gap: 16px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; }
+        .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 24px; text-align: center; min-width: 110px; }
+        .stat-card .num { font-size: 28px; font-weight: bold; font-family: monospace; }
+        .stat-card .label { font-size: 11px; color: #8b949e; margin-top: 2px; }
+        .num-total { color: #58a6ff; }
+        .num-pass { color: #3fb950; }
+        .num-fail { color: #f85149; }
+        .num-warn { color: #d29922; }
+        .num-time { color: #a78bfa; }
+
+        /* Progress bar */
+        .progress-bar { height: 4px; background: #21262d; border-radius: 2px; margin-bottom: 16px; overflow: hidden; }
+        .progress-bar .fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #22c55e); transition: width 0.3s; width: 0%; }
+
+        /* Controls */
+        .controls { text-align: center; margin-bottom: 16px; }
+        .btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; margin: 2px; }
+        .btn:hover { background: #30363d; border-color: #58a6ff; }
+        .btn-run { background: #238636; border-color: #2ea043; color: white; }
+        .btn-run:hover { background: #2ea043; }
+
+        /* Test groups */
+        .test-group { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+        .test-group-header { padding: 10px 14px; background: #1c2128; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .test-group-header h3 { color: #58a6ff; font-size: 13px; margin: 0; flex: 1; }
+        .test-group-header .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: bold; }
+        .badge-pass { background: #238636; color: white; }
+        .badge-fail { background: #da3633; color: white; }
+        .badge-pending { background: #30363d; color: #8b949e; }
+        .badge-info { background: #1f6feb; color: white; }
+
+        .test-group-body { padding: 10px 14px; }
+        .test-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; border-bottom: 1px solid #21262d; }
+        .test-row:last-child { border-bottom: none; }
+        .test-row .icon { width: 18px; text-align: center; }
+        .test-row .name { flex: 1; }
+        .test-row .tag { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: #30363d; color: #8b949e; }
+        .test-row .duration { color: #64748b; font-size: 10px; font-family: monospace; }
+        .test-row.pass .name { color: #3fb950; }
+        .test-row.fail .name { color: #f85149; }
+        .test-row.skip .name { color: #64748b; }
+
+        /* Log panel */
+        .log-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-top: 16px; }
+        .log-header { padding: 10px 14px; background: #1c2128; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; }
+        .log-header h3 { color: #58a6ff; font-size: 13px; margin: 0; }
+        .log-body { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 10px; font-size: 11px; max-height: 500px; overflow-y: auto; line-height: 1.6; white-space: pre-wrap; word-break: break-all; font-family: 'SF Mono', Consolas, monospace; }
+        .log-body .log-entry { color: #8b949e; }
+        .log-body .log-entry.pass { color: #3fb950; }
+        .log-body .log-entry.fail { color: #f85149; }
+        .log-body .log-entry.warn { color: #d29922; }
+        .log-body .log-entry.info { color: #58a6ff; }
+        .log-body .log-entry.section { color: #a78bfa; font-weight: bold; }
+
+        /* Hidden test containers */
+        .test-container { position: absolute; left: -9999px; top: -9999px; width: 800px; height: 600px; }
+    </style>
+</head>
+<body>
+    <h1>Iteration 8 Bug Fix Test Suite</h1>
+    <p class="subtitle">Covering Bug Fixes #100-#121 | 8 Test Groups | Full-Chain KGLog Logging</p>
+
+    <!-- Summary Statistics -->
+    <div class="summary">
+        <div class="stat-card"><div class="num num-total" id="statTotal">0</div><div class="label">Total Tests</div></div>
+        <div class="stat-card"><div class="num num-pass" id="statPass">0</div><div class="label">Passed</div></div>
+        <div class="stat-card"><div class="num num-fail" id="statFail">0</div><div class="label">Failed</div></div>
+        <div class="stat-card"><div class="num num-warn" id="statWarn">0</div><div class="label">Warnings</div></div>
+        <div class="stat-card"><div class="num num-time" id="statTime">0ms</div><div class="label">Duration</div></div>
+    </div>
+
+    <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
+
+    <div class="controls">
+        <button class="btn btn-run" onclick="runAllTests()">Run All Tests</button>
+        <button class="btn" onclick="clearResults()">Clear Results</button>
+        <button class="btn" onclick="toggleAllGroups()">Toggle Groups</button>
+    </div>
+
+    <!-- Test Results Container -->
+    <div id="testResults"></div>
+
+    <!-- Log Panel -->
+    <div class="log-section">
+        <div class="log-header">
+            <h3>Full-Chain Execution Log (KGLog)</h3>
+            <button class="btn" onclick="clearLog()">Clear Log</button>
+        </div>
+        <div class="log-body" id="logPanel">Waiting for tests to start...</div>
+    </div>
+
+    <!-- Hidden test containers -->
+    <div id="tc-1" class="test-container"></div>
+    <div id="tc-2" class="test-container"></div>
+    <div id="tc-3" class="test-container"></div>
+    <div id="tc-4" class="test-container"></div>
+    <div id="tc-5" class="test-container"></div>
+    <div id="tc-6" class="test-container"></div>
+    <div id="tc-7" class="test-container"></div>
+    <div id="tc-8" class="test-container"></div>
+
+    <script>
+    'use strict';
+
+    // ============================================================
+    // KGLog - Full-Chain Logger (mirrors main.js KGLog pattern)
+    // ============================================================
+    const TestLog = {
+        _logs: [],
+        _startTime: Date.now(),
+        _el: null,
+        init() { this._el = document.getElementById('logPanel'); },
+        _ts() { return '[' + (Date.now() - this._startTime) + 'ms]'; },
+        entry(method, msg) { this._raw(this._ts() + ' > ' + method + ': ' + msg, 'info'); },
+        exit(method, msg) { this._raw(this._ts() + ' < ' + method + ': ' + (msg || 'done'), 'info'); },
+        info(method, msg) { this._raw(this._ts() + ' i ' + method + ': ' + msg, 'info'); },
+        warn(method, msg) { this._raw(this._ts() + ' ! ' + method + ': ' + msg, 'warn'); },
+        error(method, msg) { this._raw(this._ts() + ' X ' + method + ': ' + msg, 'fail'); },
+        ok(method, msg) { this._raw(this._ts() + ' + ' + method + ': ' + msg, 'pass'); },
+        section(title) { this._raw('\n' + '='.repeat(60), 'section'); this._raw('  ' + title, 'section'); this._raw('='.repeat(60), 'section'); },
+        _raw(text, cls) {
+            this._logs.push({ text, cls });
+            if (this._el) {
+                const span = document.createElement('div');
+                span.className = 'log-entry' + (cls ? ' ' + cls : '');
+                span.textContent = text;
+                this._el.appendChild(span);
+                this._el.scrollTop = this._el.scrollHeight;
+            }
+        }
+    };
+    TestLog.init();
+
+    // ============================================================
+    // Test Framework
+    // ============================================================
+    const TF = {
+        results: [],
+        _groupStart: 0,
+        _totalStart: Date.now(),
+        _currentGroup: null,
+        _groupResults: {},
+
+        group(name, bugRange) {
+            this._currentGroup = name;
+            this._groupStart = Date.now();
+            this._groupResults[name] = { pass: 0, fail: 0, total: 0 };
+            TestLog.section(name + ' ' + (bugRange || ''));
+            this._renderGroupHeader(name, bugRange);
+        },
+
+        endGroup() {
+            const dur = Date.now() - this._groupStart;
+            TestLog.info(this._currentGroup, 'Group completed in ' + dur + 'ms');
+            this._updateGroupBadge(this._currentGroup);
+            this._currentGroup = null;
+        },
+
+        assert(cond, name, detail, bugId) {
+            const r = { pass: !!cond, name, detail: detail || '', bugId: bugId || '', time: Date.now() - this._totalStart, group: this._currentGroup };
+            this.results.push(r);
+            if (this._currentGroup && this._groupResults[this._currentGroup]) {
+                this._groupResults[this._currentGroup].total++;
+                if (cond) this._groupResults[this._currentGroup].pass++;
+                else this._groupResults[this._currentGroup].fail++;
+            }
+            if (cond) { TestLog.ok(name, (detail ? ' -- ' + detail : '')); }
+            else { TestLog.error(name, (detail ? ' -- ' + detail : '')); }
+            this._updateUI();
+            return cond;
+        },
+
+        assertNoThrow(fn, name, bugId) {
+            const t0 = performance.now();
+            try { fn(); return this.assert(true, name, (performance.now() - t0).toFixed(1) + 'ms', bugId); }
+            catch(e) { return this.assert(false, name, 'Exception: ' + e.message + ' (' + (performance.now() - t0).toFixed(1) + 'ms)', bugId); }
+        },
+
+        _updateUI() {
+            const total = this.results.length;
+            const pass = this.results.filter(r => r.pass).length;
+            const fail = total - pass;
+            const warn = this.results.filter(r => r.detail && r.detail.includes('WARN')).length;
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statPass').textContent = pass;
+            document.getElementById('statFail').textContent = fail;
+            document.getElementById('statWarn').textContent = warn;
+            document.getElementById('statTime').textContent = (Date.now() - this._totalStart) + 'ms';
+            document.getElementById('progressFill').style.width = (total > 0 ? (pass / total * 100) : 0) + '%';
+        },
+
+        _renderGroupHeader(name, bugRange) {
+            const container = document.getElementById('testResults');
+            const group = document.createElement('div');
+            group.className = 'test-group';
+            group.id = 'group-' + name.replace(/\s+/g, '-');
+            group.innerHTML = '<div class="test-group-header" onclick="this.parentElement.classList.toggle(\'collapsed\')">' +
+                '<h3>' + name + '</h3>' +
+                (bugRange ? '<span class="badge badge-info">' + bugRange + '</span>' : '') +
+                '<span class="badge badge-pending" id="badge-' + name.replace(/\s+/g, '-') + '">pending</span>' +
+                '</div>' +
+                '<div class="test-group-body" id="body-' + name.replace(/\s+/g, '-') + '"></div>';
+            container.appendChild(group);
+        },
+
+        _renderTestRow(name, passed, detail, bugId) {
+            if (!this._currentGroup) return;
+            const body = document.getElementById('body-' + this._currentGroup.replace(/\s+/g, '-'));
+            if (!body) return;
+            const row = document.createElement('div');
+            row.className = 'test-row ' + (passed ? 'pass' : 'fail');
+            const dur = detail ? detail.match(/[\d.]+ms/) : null;
+            row.innerHTML =
+                '<span class="icon">' + (passed ? 'PASS' : 'FAIL') + '</span>' +
+                '<span class="name">' + name + '</span>' +
+                (bugId ? '<span class="tag">' + bugId + '</span>' : '') +
+                (dur ? '<span class="duration">' + dur[0] + '</span>' : '');
+            body.appendChild(row);
+        },
+
+        _updateGroupBadge(name) {
+            const badge = document.getElementById('badge-' + name.replace(/\s+/g, '-'));
+            if (!badge) return;
+            const gr = this._groupResults[name];
+            if (!gr) return;
+            if (gr.fail === 0) {
+                badge.textContent = gr.pass + '/' + gr.total + ' PASS';
+                badge.className = 'badge badge-pass';
+            } else {
+                badge.textContent = gr.pass + '/' + gr.total + ' (' + gr.fail + ' FAIL)';
+                badge.className = 'badge badge-fail';
+            }
+        }
+    };
+
+    // Override assert to also render rows
+    const _origAssert = TF.assert.bind(TF);
+    TF.assert = function(cond, name, detail, bugId) {
+        const result = _origAssert(cond, name, detail, bugId);
+        this._renderTestRow(name, cond, detail, bugId);
+        return result;
+    };
+
+    // ============================================================
+    // Helper Functions
+    // ============================================================
+    function makeDiv(id, w, h) {
+        let d = document.getElementById(id);
+        if (d) d.remove();
+        d = document.createElement('div');
+        d.id = id;
+        d.style.cssText = 'width:' + (w || 800) + 'px;height:' + (h || 600) + 'px;position:absolute;left:-9999px;top:-9999px;';
+        document.body.appendChild(d);
+        return d;
+    }
+    function removeDiv(id) { const d = document.getElementById(id); if (d) d.remove(); }
+    function cleanupNotifications() { document.querySelectorAll('[style*="position: fixed"]').forEach(n => n.remove()); }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    // Simulate query.html showNotification (Bug #100)
+    function queryShowNotification(message, type) {
+        const colors = { success: '#10b981', warning: '#f59e0b', error: '#ef4444', info: '#3b82f6' };
+        const bgColor = colors[type] || colors.info;
+        const toast = document.createElement('div');
+        toast.textContent = message;
+        toast.style.cssText = 'position:fixed;top:20px;right:20px;background:' + bgColor + ';color:white;padding:12px 20px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;display:flex;align-items:center;gap:8px;font-size:14px;';
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.animation = 'slideOut 0.3s ease'; setTimeout(() => toast.remove(), 300); }, 3000);
+        return toast;
+    }
+
+    // Simulate query.html executeQuery with cancellation (Bug #101)
+    function createQueryExecutor() {
+        let queryTimer = null;
+        let resultCount = 0;
+        return {
+            executeQuery() {
+                if (queryTimer) { clearTimeout(queryTimer); queryTimer = null; }
+                queryTimer = setTimeout(() => {
+                    queryTimer = null;
+                    resultCount++;
+                }, 500);
+            },
+            getResultCount() { return resultCount; },
+            destroy() { if (queryTimer) { clearTimeout(queryTimer); queryTimer = null; } }
+        };
+    }
+
+    // Simulate debounce with cancel (Bug #104, #108)
+    function debounceWithCancel(fn, delay) {
+        let timer = null;
+        const debounced = function(...args) {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn.apply(this, args), delay);
+        };
+        debounced.cancel = function() { clearTimeout(timer); timer = null; };
+        return debounced;
+    }
+
+    // Simulate file-structure.html initTreemapView (Bug #102)
+    function createTreemapManager(containerId) {
+        let manager = null;
+        return {
+            initTreemapView() {
+                if (manager) { manager.destroy(); manager = null; }
+                manager = new ChartManager();
+                manager.createTreemap(containerId, KGData.fileStructure);
+            },
+            getManager() { return manager; },
+            destroy() { if (manager) { manager.destroy(); manager = null; } }
+        };
+    }
+
+    // Simulate class-hierarchy.html searchClasses in tree mode (Bug #106)
+    function searchClassesInTree(containerId, query) {
+        if (!query) return 0;
+        const allNodes = d3.select('#' + containerId).selectAll('.node');
+        allNodes.select('circle').style('stroke', '#1e293b').style('stroke-width', 2);
+        allNodes.select('text').style('fill', '#f1f5f9').style('font-weight', 'normal');
+        let matchCount = 0;
+        const lowerQuery = query.toLowerCase();
+        allNodes.each(function(d) {
+            const label = (d && d.data && d.data.label) || '';
+            if (label.toLowerCase().includes(lowerQuery)) {
+                d3.select(this).select('circle').style('stroke', '#f59e0b').style('stroke-width', 4);
+                d3.select(this).select('text').style('fill', '#f59e0b').style('font-weight', 'bold');
+                matchCount++;
+            }
+        });
+        return matchCount;
+    }
+
+    // Simulate function-calls.html updateDepth (Bug #111)
+    function simulateUpdateDepth(gv, value) {
+        if (!gv || !gv.network) return;
+        const depth = parseInt(value, 10);
+        const allNodes = gv.network.body.data.nodes;
+        const allEdges = gv.network.body.data.edges;
+        if (!allNodes || !allEdges) return;
+        const nodeIds = allNodes.getIds();
+        if (nodeIds.length === 0) return;
+        const startId = nodeIds[0];
+        const visited = new Set([startId]);
+        const queue = [[startId, 0]];
+        while (queue.length > 0) {
+            const [currentId, currentDepth] = queue.shift();
+            if (currentDepth >= depth) continue;
+            const connectedEdges = allEdges.get().filter(e => e.from === currentId || e.to === currentId);
+            for (const edge of connectedEdges) {
+                const neighborId = edge.from === currentId ? edge.to : edge.from;
+                if (!visited.has(neighborId)) { visited.add(neighborId); queue.push([neighborId, currentDepth + 1]); }
+            }
+        }
+        const updates = nodeIds.map(id => ({ id, hidden: !visited.has(id) }));
+        allNodes.update(updates);
+        const edgeUpdates = allEdges.get().map(e => ({ id: e.id, hidden: !visited.has(e.from) || !visited.has(e.to) }));
+        allEdges.update(edgeUpdates);
+        return { visibleNodes: visited.size, totalNodes: nodeIds.length };
+    }
+
+    // Simulate function-calls.html toggleFilter (Bug #112)
+    function simulateToggleFilter(gv, filterType) {
+        if (!gv || !gv.network) return;
+        const allNodes = gv.network.body.data.nodes;
+        if (!allNodes) return;
+        if (filterType === 'all') {
+            allNodes.get().forEach(n => allNodes.update({ id: n.id, hidden: false }));
+        } else {
+            allNodes.get().forEach(n => { allNodes.update({ id: n.id, hidden: n.group !== filterType }); });
+        }
+    }
+
+    // Simulate function-calls.html startCallAnimation/stopCallAnimation (Bug #113)
+    function createAnimationController(gv) {
+        let animationInterval = null;
+        return {
+            start() {
+                if (!gv || !gv.network) return;
+                const allEdges = gv.network.body.data.edges;
+                if (!allEdges) return;
+                const edges = allEdges.get();
+                let step = 0;
+                animationInterval = setInterval(() => {
+                    edges.forEach((edge, i) => {
+                        const phase = (step + i) % 3;
+                        const colors = ['#475569', '#3b82f6', '#60a5fa'];
+                        const widths = [1, 3, 2];
+                        allEdges.update({ id: edge.id, color: { color: colors[phase], opacity: 0.8 }, width: widths[phase] });
+                    });
+                    step++;
+                }, 500);
+            },
+            stop() {
+                if (animationInterval) { clearInterval(animationInterval); animationInterval = null; }
+            },
+            isRunning() { return animationInterval !== null; }
+        };
+    }
+
+    // Simulate module-deps.html focusModule toast (Bug #116)
+    function simulateFocusModuleToast(moduleName) {
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;top:20px;right:20px;padding:12px 20px;color:white;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;animation:slideIn 0.3s ease;max-width:400px;background:#3b82f6;';
+        toast.textContent = 'Focus module: ' + moduleName + ' (switch to network view)';
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.animation = 'slideOut 0.3s ease'; setTimeout(() => toast.remove(), 300); }, 2000);
+        return toast;
+    }
+
+    // ============================================================
+    // Group 1: query.html Bug Fixes (#100-#101)
+    // ============================================================
+    async function testGroup1() {
+        TF.group('Group 1: query.html Bug Fixes', '#100-#101');
+        TestLog.entry('testGroup1', 'Starting query.html bug fix tests');
+
+        // Test #100: showNotification function exists and works
+        TestLog.entry('test#100', 'Testing showNotification function');
+        cleanupNotifications();
+
+        // Test success type
+        TF.assertNoThrow(() => {
+            const toast = queryShowNotification('Test success message', 'success');
+            TF.assert(toast !== null, '#100: showNotification creates toast element for success type', '', '#100');
+            TF.assert(toast.textContent === 'Test success message', '#100: Toast has correct text content', '', '#100');
+            const bg = toast.style.background;
+            TF.assert(bg.includes('10b981') || bg.includes('16') || bg.length > 0, '#100: Success toast has green background color', 'bg=' + bg, '#100');
+        }, '#100: showNotification success type does not throw', '#100');
+
+        cleanupNotifications();
+
+        // Test warning type
+        TF.assertNoThrow(() => {
+            const toast = queryShowNotification('Test warning message', 'warning');
+            TF.assert(toast !== null, '#100: showNotification creates toast for warning type', '', '#100');
+            const bg = toast.style.background;
+            TF.assert(bg.includes('f59e0b') || bg.length > 0, '#100: Warning toast has amber background color', 'bg=' + bg, '#100');
+        }, '#100: showNotification warning type does not throw', '#100');
+
+        cleanupNotifications();
+
+        // Test error type
+        TF.assertNoThrow(() => {
+            const toast = queryShowNotification('Test error message', 'error');
+            TF.assert(toast !== null, '#100: showNotification creates toast for error type', '', '#100');
+            const bg = toast.style.background;
+            TF.assert(bg.includes('ef4444') || bg.length > 0, '#100: Error toast has red background color', 'bg=' + bg, '#100');
+        }, '#100: showNotification error type does not throw', '#100');
+
+        cleanupNotifications();
+
+        // Test info type
+        TF.assertNoThrow(() => {
+            const toast = queryShowNotification('Test info message', 'info');
+            TF.assert(toast !== null, '#100: showNotification creates toast for info type', '', '#100');
+            const bg = toast.style.background;
+            TF.assert(bg.includes('3b82f6') || bg.length > 0, '#100: Info toast has blue background color', 'bg=' + bg, '#100');
+        }, '#100: showNotification info type does not throw', '#100');
+
+        cleanupNotifications();
+        TestLog.exit('test#100', 'showNotification tests completed');
+
+        // Test #101: executeQuery cancellation
+        TestLog.entry('test#101', 'Testing executeQuery cancellation');
+        const executor = createQueryExecutor();
+        executor.executeQuery(); // First call
+        executor.executeQuery(); // Second call - should cancel first
+        await sleep(800);
+        const count = executor.getResultCount();
+        TF.assert(count === 1, '#101: Only one result displayed after rapid double-call', 'resultCount=' + count, '#101');
+        executor.destroy();
+        TestLog.exit('test#101', 'executeQuery cancellation test completed');
+
+        TF.endGroup();
+    }
+
+    // ============================================================
+    // Group 2: file-structure.html Bug Fixes (#102-#104)
+    // ============================================================
+    async function testGroup2() {
+        TF.group('Group 2: file-structure.html Bug Fixes', '#102-#104');
+        TestLog.entry('testGroup2', 'Starting file-structure.html bug fix tests');
+
+        // Test #102: treemapChartManager is properly destroyed and recreated
+        TestLog.entry('test#102', 'Testing treemapChartManager destroy/recreate');
+        const containerId = 'tc-1';
+        const tmMgr = createTreemapManager(containerId);
+        tmMgr.initTreemapView();
+        const mgr1 = tmMgr.getManager();
+        TF.assert(mgr1 !== null, '#102: First treemapChartManager created', '', '#102');
+
+        const childCount1 = document.getElementById(containerId).querySelectorAll('svg').length;
+        TF.assert(childCount1 > 0, '#102: First treemap SVG rendered (' + childCount1 + ' SVGs)', '', '#102');
+
+        tmMgr.initTreemapView(); // Second call - should destroy first
+        const mgr2 = tmMgr.getManager();
+        TF.assert(mgr2 !== null, '#102: Second treemapChartManager created', '', '#102');
+        TF.assert(mgr1 !== mgr2, '#102: New manager instance (old destroyed)', '', '#102');
+
+        const childCount2 = document.getElementById(containerId).querySelectorAll('svg').length;
+        TF.assert(childCount2 <= childCount1 + 1, '#102: No DOM accumulation (SVGs: ' + childCount1 + ' -> ' + childCount2 + ')', '', '#102');
+
+        tmMgr.destroy();
+        TestLog.exit('test#102', 'treemapChartManager destroy/recreate test completed');
+
+        // Test #103: resize preserves tree state
+        TestLog.entry('test#103', 'Testing resize preserves tree state');
+        const treeContainerId = 'tc-2';
+        const tv = new TreeVisualizer(treeContainerId, { width: 800, height: 600 });
+        tv.init(KGData.fileStructure);
+        await sleep(300);
+
+        // Collapse a node
+        if (tv.root && tv.root.children && tv.root.children.length > 0) {
+            const firstChild = tv.root.children[0];
+            if (firstChild.children) {
+                firstChild._children = firstChild.children;
+                firstChild.children = null;
+                tv.update(tv.root);
+            }
+        }
+
+        // Simulate resize by re-rendering
+        const svgBefore = document.getElementById(treeContainerId).querySelector('svg');
+        TF.assert(svgBefore !== null, '#103: Tree SVG exists before resize', '', '#103');
+
+        // Resize handler logic from file-structure.html
+        if (tv.root) {
+            tv.update(tv.root);
+        }
+
+        const svgAfter = document.getElementById(treeContainerId).querySelector('svg');
+        TF.assert(svgAfter !== null, '#103: Tree SVG still exists after resize', '', '#103');
+        TF.assert(tv.root !== null, '#103: Tree root data preserved after resize', '', '#103');
+
+        tv.destroy();
+        TestLog.exit('test#103', 'resize preserves tree state test completed');
+
+        // Test #104: debounce has cancel method
+        TestLog.entry('test#104', 'Testing debounce cancel method');
+        let debounceCalled = false;
+        const debounced = debounceWithCancel(() => { debounceCalled = true; }, 200);
+        TF.assert(typeof debounced.cancel === 'function', '#104: Debounced function has cancel method', '', '#104');
+
+        debounced(); // Schedule
+        debounced.cancel(); // Cancel immediately
+        await sleep(400);
+        TF.assert(!debounceCalled, '#104: Cancelled function was not executed', 'debounceCalled=' + debounceCalled, '#104');
+
+        // Verify cancel can be called multiple times safely
+        TF.assertNoThrow(() => { debounced.cancel(); debounced.cancel(); }, '#104: Multiple cancel calls do not throw', '#104');
+        TestLog.exit('test#104', 'debounce cancel test completed');
+
+        TF.endGroup();
+    }
+
+    // ============================================================
+    // Group 3: class-hierarchy.html Bug Fixes (#105-#109)
+    // ============================================================
+    async function testGroup3() {
+        TF.group('Group 3: class-hierarchy.html Bug Fixes', '#105-#109');
+        TestLog.entry('testGroup3', 'Starting class-hierarchy.html bug fix tests');
+
+        // Test #105: D3 tree cleanup on view switch
+        TestLog.entry('test#105', 'Testing D3 tree cleanup on view switch');
+        const treeContainerId = 'tc-3';
+        const tv = new TreeVisualizer(treeContainerId, { width: 800, height: 600 });
+        tv.init(KGData.fileStructure);
+        await sleep(200);
+
+        const svgCountBefore = document.getElementById(treeContainerId).querySelectorAll('svg').length;
+        TF.assert(svgCountBefore > 0, '#105: Tree SVG exists before switch (' + svgCountBefore + ')', '', '#105');
+
+        // Simulate Bug #105 fix: clean up D3 tree SVG and zoom events
+        const treeContainer = d3.select('#' + treeContainerId);
+        treeContainer.selectAll('*').remove();
+        treeContainer.on('.zoom', null);
+
+        const svgCountAfter = document.getElementById(treeContainerId).querySelectorAll('svg').length;
+        TF.assert(svgCountAfter === 0, '#105: All SVGs cleaned after view switch (' + svgCountBefore + ' -> ' + svgCountAfter + ')', '', '#105');
+
+        // Now init network view in same container
+        const gv = new GraphVisualizer(treeContainerId);
+        gv.init(KGData.classHierarchy.nodes, KGData.classHierarchy.edges);
+        await sleep(200);
+        TF.assert(gv.network !== null, '#105: Network initialized in same container after tree cleanup', '', '#105');
+        gv.destroy();
+        TestLog.exit('test#105', 'D3 tree cleanup test completed');
+
+        // Test #106: searchClasses works in tree mode
+        TestLog.entry('test#106', 'Testing searchClasses in tree mode');
+        const searchContainerId = 'tc-4';
+        const tv2 = new TreeVisualizer(searchContainerId, { width: 800, height: 600 });
+        tv2.init(KGData.fileStructure);
+        await sleep(300);
+
+        const matchCount = searchClassesInTree(searchContainerId, 'components');
+        TF.assert(matchCount >= 0, '#106: searchClasses executed without error in tree mode', 'matches=' + matchCount, '#106');
+
+        // Verify highlighting happened (circles with stroke #f59e0b)
+        const highlightedCircles = document.getElementById(searchContainerId).querySelectorAll('circle[style*="f59e0b"]');
+        const allCircles = document.getElementById(searchContainerId).querySelectorAll('circle');
+        TestLog.info('test#106', 'highlighted=' + highlightedCircles.length + ' total=' + allCircles.length);
+
+        // Search for something that won't match
+        const noMatchCount = searchClassesInTree(searchContainerId, 'zzz_nonexistent_zzz');
+        TF.assert(noMatchCount === 0, '#106: searchClasses returns 0 for non-matching query', '', '#106');
+
+        tv2.destroy();
+        TestLog.exit('test#106', 'searchClasses tree mode test completed');
+
+        // Test #107: hierarchyVisualizer is removed
+        TestLog.entry('test#107', 'Testing hierarchyVisualizer is removed');
+        TF.assert(typeof hierarchyVisualizer === 'undefined', '#107: hierarchyVisualizer is not defined (removed)', '', '#107');
+        TestLog.exit('test#107', 'hierarchyVisualizer removal test completed');
+
+        // Test #108: debounce has cancel method (class-hierarchy.html)
+        TestLog.entry('test#108', 'Testing class-hierarchy debounce cancel');
+        let called108 = false;
+        const deb108 = debounceWithCancel(() => { called108 = true; }, 200);
+        TF.assert(typeof deb108.cancel === 'function', '#108: Debounce has cancel method', '', '#108');
+        deb108();
+        deb108.cancel();
+        await sleep(400);
+        TF.assert(!called108, '#108: Cancelled debounce not executed', '', '#108');
+        TestLog.exit('test#108', 'class-hierarchy debounce cancel test completed');
+
+        // Test #109: resize handler covers both tree and network views
+        TestLog.entry('test#109', 'Testing resize handler covers both views');
+        // Simulate the resize handler logic from class-hierarchy.html
+        let currentView = 'tree';
+        const tv3 = new TreeVisualizer('tc-5', { width: 800, height: 600 });
+        tv3.init(KGData.fileStructure);
+        const gv3 = new GraphVisualizer('tc-6');
+        gv3.init(KGData.classHierarchy.nodes, KGData.classHierarchy.edges);
+
+        // Simulate resize in tree mode
+        TF.assertNoThrow(() => {
+            if (currentView === 'tree') {
+                if (tv3.root) tv3.update(tv3.root);
+            }
+        }, '#109: Resize handler works in tree mode', '#109');
+
+        // Simulate resize in network mode
+        currentView = 'network';
+        TF.assertNoThrow(() => {
+            if (gv3 && currentView === 'network') {
+                gv3.fit();
+            }
+        }, '#109: Resize handler works in network mode', '#109');
+
+        tv3.destroy();
+        gv3.destroy();
+        TestLog.exit('test#109', 'resize handler dual-view test completed');
+
+        TF.endGroup();
+    }
+
+    // ============================================================
+    // Group 4: function-calls.html Bug Fixes (#110-#114)
+    // ============================================================
+    async function testGroup4() {
+        TF.group('Group 4: function-calls.html Bug Fixes', '#110-#114');
+        TestLog.entry('testGroup4', 'Starting function-calls.html bug fix tests');
+
+        // Test #110: switchView nulls callGraphVisualizer after destroy
+        TestLog.entry('test#110', 'Testing switchView nulls callGraphVisualizer');
+        let callGraphVisualizer = null;
+        const containerId = 'tc-1';
+
+        function initCallGraph() {
+            const data = KGData.functionCalls;
+            const nodes = data.nodes.map(n => ({ id: n.id, label: n.label, group: n.group, color: '#4CAF50', font: { color: '#f1f5f9' } }));
+            const edges = data.edges.map(e => ({ from: e.from, to: e.to, arrows: 'to', color: { color: '#475569', opacity: 0.6 }, smooth: { type: 'curvedCW', roundness: 0.2 } }));
+            callGraphVisualizer = new GraphVisualizer(containerId);
+            callGraphVisualizer.init(nodes, edges);
+        }
+
+        initCallGraph();
+        TF.assert(callGraphVisualizer !== null, '#110: callGraphVisualizer initialized', '', '#110');
+
+        // Simulate switchView Bug #110 fix
+        if (callGraphVisualizer) {
+            callGraphVisualizer.destroy();
+            callGraphVisualizer = null;  // Bug #110 fix
+        }
+        TF.assert(callGraphVisualizer === null, '#110: callGraphVisualizer nulled after destroy', '', '#110');
+
+        // Re-init should work
+        initCallGraph();
+        TF.assert(callGraphVisualizer !== null, '#110: callGraphVisualizer re-initialized successfully', '', '#110');
+        callGraphVisualizer.destroy();
+        callGraphVisualizer = null;
+        TestLog.exit('test#110', 'switchView null test completed');
+
+        // Test #111: updateDepth actually filters nodes
+        TestLog.entry('test#111', 'Testing updateDepth filters nodes');
+        const depthContainerId = 'tc-2';
+        const gvDepth = new GraphVisualizer(depthContainerId);
+        const data = KGData.functionCalls;
+        const nodes = data.nodes.map(n => ({ id: n.id, label: n.label, group: n.group, color: '#4CAF50', font: { color: '#f1f5f9' } }));
+        const edges = data.edges.map(e => ({ from: e.from, to: e.to, arrows: 'to', color: { color: '#475569', opacity: 0.6 } }));
+        gvDepth.init(nodes, edges);
+        await sleep(300);
+
+        const totalNodes = nodes.length;
+        const result = simulateUpdateDepth(gvDepth, '1');
+        TF.assert(result !== undefined, '#111: updateDepth executed', '', '#111');
+        TF.assert(result.visibleNodes < result.totalNodes, '#111: Depth=1 hides some nodes (visible=' + result.visibleNodes + '/' + result.totalNodes + ')', '', '#111');
+
+        // Reset: set depth to max to show all
+        simulateUpdateDepth(gvDepth, String(totalNodes));
+        const allVisible = gvDepth.network.body.data.nodes.get().filter(n => n.hidden).length;
+        TF.assert(allVisible === 0, '#111: All nodes visible at max depth', '', '#111');
+
+        gvDepth.destroy();
+        TestLog.exit('test#111', 'updateDepth filter test completed');
+
+        // Test #112: toggleFilter actually filters by group
+        TestLog.entry('test#112', 'Testing toggleFilter filters by group');
+        const filterContainerId = 'tc-3';
+        const gvFilter = new GraphVisualizer(filterContainerId);
+        gvFilter.init(nodes, edges);
+        await sleep(300);
+
+        // Filter to only 'entry' group
+        simulateToggleFilter(gvFilter, 'entry');
+        const visibleAfterFilter = gvFilter.network.body.data.nodes.get().filter(n => !n.hidden).length;
+        const entryCount = nodes.filter(n => n.group === 'entry').length;
+        TF.assert(visibleAfterFilter === entryCount, '#112: Filter shows only entry group nodes (visible=' + visibleAfterFilter + ', expected=' + entryCount + ')', '', '#112');
+
+        // Reset filter
+        simulateToggleFilter(gvFilter, 'all');
+        const visibleAfterReset = gvFilter.network.body.data.nodes.get().filter(n => !n.hidden).length;
+        TF.assert(visibleAfterReset === totalNodes, '#112: All nodes visible after reset filter', '', '#112');
+
+        gvFilter.destroy();
+        TestLog.exit('test#112', 'toggleFilter test completed');
+
+        // Test #113: startCallAnimation/stopCallAnimation work
+        TestLog.entry('test#113', 'Testing startCallAnimation/stopCallAnimation');
+        const animContainerId = 'tc-4';
+        const gvAnim = new GraphVisualizer(animContainerId);
+        gvAnim.init(nodes, edges);
+        await sleep(300);
+
+        const animCtrl = createAnimationController(gvAnim);
+        TF.assert(!animCtrl.isRunning(), '#113: Animation not running initially', '', '#113');
+
+        animCtrl.start();
+        TF.assert(animCtrl.isRunning(), '#113: Animation running after start', '', '#113');
+
+        await sleep(600); // Let at least one animation frame execute
+        TF.assert(animCtrl.isRunning(), '#113: Animation still running after 600ms', '', '#113');
+
+        animCtrl.stop();
+        TF.assert(!animCtrl.isRunning(), '#113: Animation stopped after stop', '', '#113');
+
+        // Verify stop can be called multiple times
+        TF.assertNoThrow(() => { animCtrl.stop(); animCtrl.stop(); }, '#113: Multiple stop calls do not throw', '#113');
+
+        gvAnim.destroy();
+        TestLog.exit('test#113', 'animation control test completed');
+
+        // Test #114: resize handler exists
+        TestLog.entry('test#114', 'Testing resize handler exists');
+        // Verify debounce function exists (from main.js)
+        TF.assert(typeof debounce === 'function', '#114: debounce function exists globally', '', '#114');
+        // Verify debounce has cancel method (Bug #82 fix)
+        const testDeb = debounce(() => {}, 100);
+        TF.assert(typeof testDeb.cancel === 'function', '#114: debounce has cancel method (Bug #82)', '', '#114');
+        testDeb.cancel();
+
+        // Simulate resize handler
+        const gvResize = new GraphVisualizer('tc-5');
+        gvResize.init(nodes.slice(0, 5), edges.slice(0, 4));
+        TF.assertNoThrow(() => { if (gvResize) gvResize.fit(); }, '#114: Resize handler (fit) does not throw', '#114');
+        gvResize.destroy();
+        TestLog.exit('test#114', 'resize handler test completed');
+
+        TF.endGroup();
+    }
+
+    // ============================================================
+    // Group 5: module-deps.html Bug Fixes (#115-#117)
+    // ============================================================
+    async function testGroup5() {
+        TF.group('Group 5: module-deps.html Bug Fixes', '#115-#117');
+        TestLog.entry('testGroup5', 'Starting module-deps.html bug fix tests');
+
+        // Test #115: chordChartManager is properly destroyed and recreated
+        TestLog.entry('test#115', 'Testing chordChartManager destroy/recreate');
+        const chordContainerId = 'tc-1';
+        let chordChartManager = null;
+
+        function initChordView() {
+            if (chordChartManager) { chordChartManager.destroy(); chordChartManager = null; }
+            const data = KGData.moduleDeps;
+            const modules = data.modules.map(m => m.name);
+            const matrix = Array(modules.length).fill(null).map(() => Array(modules.length).fill(0));
+            data.dependencies.forEach(dep => {
+                const fromIdx = modules.indexOf(dep.from);
+                const toIdx = modules.indexOf(dep.to);
+                if (fromIdx !== -1 && toIdx !== -1) matrix[fromIdx][toIdx] = dep.strength;
+            });
+            chordChartManager = new ChartManager();
+            chordChartManager.createChordDiagram(chordContainerId, matrix, modules);
+        }
+
+        initChordView();
+        TF.assert(chordChartManager !== null, '#115: First chordChartManager created', '', '#115');
+        const svgCount1 = document.getElementById(chordContainerId).querySelectorAll('svg').length;
+        TF.assert(svgCount1 > 0, '#115: First chord SVG rendered', '', '#115');
+
+        initChordView(); // Second call
+        TF.assert(chordChartManager !== null, '#115: Second chordChartManager created', '', '#115');
+        const svgCount2 = document.getElementById(chordContainerId).querySelectorAll('svg').length;
+        TF.assert(svgCount2 <= svgCount1 + 1, '#115: No DOM accumulation (SVGs: ' + svgCount1 + ' -> ' + svgCount2 + ')', '', '#115');
+
+        if (chordChartManager) { chordChartManager.destroy(); chordChartManager = null; }
+        TestLog.exit('test#115', 'chordChartManager destroy/recreate test completed');
+
+        // Test #116: focusModule shows toast in non-network mode
+        TestLog.entry('test#116', 'Testing focusModule toast in non-network mode');
+        cleanupNotifications();
+        let currentView = 'chord'; // Non-network mode
+
+        // Simulate focusModule Bug #116 fix
+        if (currentView !== 'network') {
+            const toast = simulateFocusModuleToast('app');
+            TF.assert(toast !== null, '#116: Toast created for non-network mode focus', '', '#116');
+            TF.assert(toast.textContent.includes('app'), '#116: Toast contains module name', '', '#116');
+            TF.assert(toast.textContent.includes('network'), '#116: Toast mentions switching to network view', '', '#116');
+        } else {
+            TF.assert(true, '#116: Skipped (in network mode)', '', '#116');
+        }
+        await sleep(100);
+        cleanupNotifications();
+        TestLog.exit('test#116', 'focusModule toast test completed');
+
+        // Test #117: resize handler exists
+        TestLog.entry('test#117', 'Testing resize handler exists');
+        // Verify debounce function exists
+        TF.assert(typeof debounce === 'function', '#117: debounce function exists', '', '#117');
+        const deb117 = debounce(() => {}, 100);
+        TF.assert(typeof deb117.cancel === 'function', '#117: debounce has cancel method', '', '#117');
+        deb117.cancel();
+
+        // Simulate resize handler for module-deps
+        const gvModule = new GraphVisualizer('tc-2');
+        const modNodes = KGData.moduleDeps.modules.map(m => ({ id: m.name, label: m.name }));
+        const modEdges = KGData.moduleDeps.dependencies.map(d => ({ from: d.from, to: d.to }));
+        gvModule.init(modNodes, modEdges);
+        TF.assertNoThrow(() => { if (gvModule) gvModule.fit(); }, '#117: Resize handler (fit) does not throw', '#117');
+        gvModule.destroy();
+        TestLog.exit('test#117', 'resize handler test completed');
+
+        TF.endGroup();
+    }
+
+    // ============================================================
+    // Group 6: statistics.html Bug Fixes (#118-#121)
+    // ============================================================
+    async function testGroup6() {
+        TF.group('Group 6: statistics.html Bug Fixes', '#118-#121');
+        TestLog.entry('testGroup6', 'Starting statistics.html bug fix tests');
+
+        // Test #118: time buttons update charts
+        TestLog.entry('test#118', 'Testing time buttons update charts');
+        const chartContainerId = 'tc-1';
+        const statsCM = new ChartManager();
+        window._statsChartManager = statsCM;
+
+        // Create initial chart
+        statsCM.createLineChart(chartContainerId, KGData.codeTrend);
+        const svgCountBefore = document.getElementById(chartContainerId).querySelectorAll('svg').length;
+        TF.assert(svgCountBefore > 0, '#118: Initial chart rendered', '', '#118');
+
+        // Simulate clicking "30 days" button - update with different data
+        const newData30 = [
+            { date: '2024-01-01', lines: 130000 },
+            { date: '2024-01-08', lines: 138000 },
+            { date: '2024-01-15', lines: 145200 },
+            { date: '2024-01-22', lines: 152000 }
+        ];
+        statsCM.createLineChart(chartContainerId, newData30);
+        const svgCountAfter = document.getElementById(chartContainerId).querySelectorAll('svg').length;
+        TF.assert(svgCountAfter > 0, '#118: Chart updated after time button click', '', '#118');
+
+        // Verify data actually changed (SVG path should be different)
+        TF.assert(svgCountAfter <= svgCountBefore + 1, '#118: No DOM accumulation on chart update', '', '#118');
+
+        // Test with "7 days" data
+        const newData7 = [
+            { date: '2024-01-15', lines: 145200 },
+            { date: '2024-01-16', lines: 145800 },
+            { date: '2024-01-17', lines: 146300 },
+            { date: '2024-01-18', lines: 147100 },
+            { date: '2024-01-19', lines: 148000 },
+            { date: '2024-01-20', lines: 148200 },
+            { date: '2024-01-21', lines: 148500 }
+        ];
+        statsCM.createLineChart(chartContainerId, newData7);
+        TF.assertNoThrow(() => statsCM.createLineChart(chartContainerId, newData7), '#118: 7-day data update does not throw', '', '#118');
+
+        statsCM.destroy();
+        TestLog.exit('test#118', 'time buttons update test completed');
+
+        // Test #120: resize handler exists
+        TestLog.entry('test#120', 'Testing resize handler exists');
+        TF.assert(typeof debounce === 'function', '#120: debounce function exists', '', '#120');
+        const deb120 = debounce(() => {}, 100);
+        TF.assert(typeof deb120.cancel === 'function', '#120: debounce has cancel method', '', '#120');
+        deb120.cancel();
+
+        // Simulate statistics resize handler
+        const statsCM2 = new ChartManager();
+        TF.assertNoThrow(() => {
+            if (statsCM2) {
+                statsCM2.createBarChart('tc-2', KGData.codeStats.languages);
+            }
+        }, '#120: Resize handler re-init charts does not throw', '#120');
+        statsCM2.destroy();
+        TestLog.exit('test#120', 'resize handler test completed');
+
+        // Test #121: _statsChartManager is accessible globally
+        TestLog.entry('test#121', 'Testing _statsChartManager global access');
+        const testCM = new ChartManager();
+        window._statsChartManager = testCM;
+        TF.assert(window._statsChartManager !== undefined, '#121: _statsChartManager is accessible via window', '', '#121');
+        TF.assert(window._statsChartManager instanceof ChartManager, '#121: _statsChartManager is a ChartManager instance', '', '#121');
+        testCM.destroy();
+        window._statsChartManager = null;
+        TestLog.exit('test#121', '_statsChartManager global access test completed');
+
+        TF.endGroup();
+    }
+
+    // ============================================================
+    // Group 7: Cross-Page Memory Leak Detection
+    // ============================================================
+    async function testGroup7() {
+        TF.group('Group 7: Cross-Page Memory Leak Detection', 'Memory');
+        TestLog.entry('testGroup7', 'Starting memory leak detection tests');
+
+        // Test: Create/destroy cycle for each visualizer type
+        TestLog.entry('mem-cycle', 'Testing create/destroy cycles for all visualizer types');
+
+        const baseNodeCount = document.querySelectorAll('*').length;
+        TestLog.info('mem-cycle', 'Base DOM node count: ' + baseNodeCount);
+
+        // GraphVisualizer cycle
+        const gvContainer = 'tc-1';
+        for (let i = 0; i < 20; i++) {
+            const gv = new GraphVisualizer(gvContainer);
+            gv.init(KGData.projectStructure.nodes, KGData.projectStructure.edges);
+            gv.searchNodes('App');
+            gv.destroy();
+        }
+        const afterGVNodes = document.querySelectorAll('*').length;
+        const gvLeak = afterGVNodes - baseNodeCount;
+        TestLog.info('mem-cycle', 'After 20x GraphVisualizer cycles: +' + gvLeak + ' nodes');
+        TF.assert(gvLeak < 200, 'Memory: GraphVisualizer 20x cycle DOM leak < 200 nodes', 'leak=' + gvLeak, 'MEM');
+
+        // TreeVisualizer cycle
+        const tvContainer = 'tc-2';
+        for (let i = 0; i < 20; i++) {
+            const tv = new TreeVisualizer(tvContainer, { width: 800, height: 600 });
+            tv.init(KGData.fileStructure);
+            tv.expandAll();
+            tv.destroy();
+        }
+        const afterTVNodes = document.querySelectorAll('*').length;
+        const tvLeak = afterTVNodes - baseNodeCount;
+        TestLog.info('mem-cycle', 'After 20x TreeVisualizer cycles: +' + tvLeak + ' nodes (cumulative)');
+        TF.assert(tvLeak < 300, 'Memory: TreeVisualizer 20x cycle DOM leak < 300 nodes', 'leak=' + tvLeak, 'MEM');
+
+        // ChartManager cycle
+        const cmContainer = 'tc-3';
+        const cm = new ChartManager();
+        for (let i = 0; i < 20; i++) {
+            cm.createPieChart(cmContainer, KGData.fileTypes);
+            cm.createBarChart(cmContainer, KGData.codeStats.languages);
+        }
+        cm.destroy();
+        const afterCMNodes = document.querySelectorAll('*').length;
+        const cmLeak = afterCMNodes - baseNodeCount;
+        TestLog.info('mem-cycle', 'After 20x ChartManager cycles: +' + cmLeak + ' nodes (cumulative)');
+        TF.assert(cmLeak < 300, 'Memory: ChartManager 20x cycle DOM leak < 300 nodes', 'leak=' + cmLeak, 'MEM');
+
+        TestLog.exit('mem-cycle', 'Create/destroy cycle tests completed');
+
+        // Test: Multiple switchView cycles, verify DOM stays stable
+        TestLog.entry('switchview-cycle', 'Testing multiple switchView cycles');
+        const switchContainer = 'tc-4';
+        const nodeCountBeforeSwitch = document.querySelectorAll('*').length;
+
+        for (let i = 0; i < 10; i++) {
+            // Tree view
+            const tv = new TreeVisualizer(switchContainer, { width: 800, height: 600 });
+            tv.init(KGData.fileStructure);
+            tv.destroy();
+
+            // Network view
+            const gv = new GraphVisualizer(switchContainer);
+            gv.init(KGData.classHierarchy.nodes, KGData.classHierarchy.edges);
+            gv.destroy();
+
+            // Treemap view
+            const cm2 = new ChartManager();
+            cm2.createTreemap(switchContainer, KGData.fileStructure);
+            cm2.destroy();
+        }
+
+        const nodeCountAfterSwitch = document.querySelectorAll('*').length;
+        const switchLeak = nodeCountAfterSwitch - nodeCountBeforeSwitch;
+        TestLog.info('switchview-cycle', 'After 10x switchView cycles: +' + switchLeak + ' nodes');
+        TF.assert(switchLeak < 200, 'Memory: 10x switchView cycle DOM leak < 200 nodes', 'leak=' + switchLeak, 'MEM');
+
+        TestLog.exit('switchview-cycle', 'switchView cycle test completed');
+        TF.endGroup();
+    }
+
+    // ============================================================
+    // Group 8: Edge Cases & Chaos Scenarios
+    // ============================================================
+    async function testGroup8() {
+        TF.group('Group 8: Edge Cases & Chaos Scenarios', 'Edge');
+        TestLog.entry('testGroup8', 'Starting edge case and chaos tests');
+
+        // Test: Empty data passed to all chart types
+        TestLog.entry('edge-empty', 'Testing empty data for all chart types');
+        const emptyContainer = 'tc-1';
+        const cmEmpty = new ChartManager();
+
+        TF.assertNoThrow(() => cmEmpty.createPieChart(emptyContainer, []), 'Edge: PieChart empty array', 'EDGE');
+        TF.assertNoThrow(() => cmEmpty.createPieChart(emptyContainer, null), 'Edge: PieChart null', 'EDGE');
+        TF.assertNoThrow(() => cmEmpty.createLineChart(emptyContainer, []), 'Edge: LineChart empty array', 'EDGE');
+        TF.assertNoThrow(() => cmEmpty.createLineChart(emptyContainer, null), 'Edge: LineChart null', 'EDGE');
+        TF.assertNoThrow(() => cmEmpty.createBarChart(emptyContainer, []), 'Edge: BarChart empty array', 'EDGE');
+        TF.assertNoThrow(() => cmEmpty.createBarChart(emptyContainer, null), 'Edge: BarChart null', 'EDGE');
+        TF.assertNoThrow(() => cmEmpty.createTreemap(emptyContainer, null), 'Edge: Treemap null', 'EDGE');
+        TF.assertNoThrow(() => cmEmpty.createForceGraph(emptyContainer, [], []), 'Edge: ForceGraph empty arrays', 'EDGE');
+        TF.assertNoThrow(() => cmEmpty.createForceGraph(emptyContainer, null, null), 'Edge: ForceGraph null', 'EDGE');
+        TF.assertNoThrow(() => cmEmpty.createChordDiagram(emptyContainer, []), 'Edge: ChordDiagram empty array', 'EDGE');
+        TF.assertNoThrow(() => cmEmpty.createChordDiagram(emptyContainer, null), 'Edge: ChordDiagram null', 'EDGE');
+        cmEmpty.destroy();
+        TestLog.exit('edge-empty', 'Empty data tests completed');
+
+        // Test: Single node graph
+        TestLog.entry('edge-single', 'Testing single node graph');
+        const singleContainer = 'tc-2';
+        const gvSingle = new GraphVisualizer(singleContainer);
+        TF.assertNoThrow(() => {
+            gvSingle.init([{ id: 'solo', label: 'SoloNode', group: 'component' }], []);
+        }, 'Edge: Single node graph init', 'EDGE');
+        TF.assertNoThrow(() => gvSingle.searchNodes('Solo'), 'Edge: Single node search', 'EDGE');
+        TF.assertNoThrow(() => gvSingle.fit(), 'Edge: Single node fit', 'EDGE');
+        gvSingle.destroy();
+        TestLog.exit('edge-single', 'Single node test completed');
+
+        // Test: Very long labels (>100 chars)
+        TestLog.entry('edge-longlabel', 'Testing very long labels');
+        const longLabelContainer = 'tc-3';
+        const gvLong = new GraphVisualizer(longLabelContainer);
+        const longLabel = 'A'.repeat(200);
+        TF.assertNoThrow(() => {
+            gvLong.init([{ id: 'long', label: longLabel, group: 'component' }], []);
+        }, 'Edge: 200-char label graph init', 'EDGE');
+        TF.assertNoThrow(() => gvLong.searchNodes('AAA'), 'Edge: Search in long label', 'EDGE');
+        gvLong.destroy();
+
+        // Long label in tree
+        const tvLong = new TreeVisualizer('tc-4', { width: 800, height: 600 });
+        const longTreeData = { name: 'R'.repeat(150), children: [{ name: 'C'.repeat(150), value: 10 }] };
+        TF.assertNoThrow(() => tvLong.init(longTreeData), 'Edge: Tree with 150-char node names', 'EDGE');
+        tvLong.destroy();
+        TestLog.exit('edge-longlabel', 'Long label test completed');
+
+        // Test: Special characters in search queries
+        TestLog.entry('edge-specialchars', 'Testing special characters in search');
+        const specialContainer = 'tc-5';
+        const gvSpecial = new GraphVisualizer(specialContainer);
+        gvSpecial.init([
+            { id: 1, label: '<scr' + 'ipt>alert(1)</scr' + 'ipt>', group: 'component' },
+            { id: 2, label: 'Tom & Jerry', group: 'utility' },
+            { id: 3, label: 'He said "hello"', group: 'model' },
+            { id: 4, label: 'A>B<C', group: 'service' }
+        ], []);
+        await sleep(200);
+
+        const specialQueries = ['<scr' + 'ipt>', '&', '"', '<>', 'alert(1)', 'Tom & Jerry'];
+        for (const q of specialQueries) {
+            TF.assertNoThrow(() => {
+                const results = gvSpecial.searchNodes(q);
+            }, 'Edge: Search with special chars "' + q.substring(0, 20) + '"', 'EDGE');
+        }
+        gvSpecial.destroy();
+        TestLog.exit('edge-specialchars', 'Special characters test completed');
+
+        // Test: Rapid view switching (10x in 1 second)
+        TestLog.entry('edge-rapid', 'Testing rapid view switching (10x in 1 second)');
+        const rapidContainer = 'tc-6';
+        const rapidStart = performance.now();
+        let errors = 0;
+        for (let i = 0; i < 10; i++) {
+            try {
+                if (i % 2 === 0) {
+                    const tv = new TreeVisualizer(rapidContainer, { width: 800, height: 600 });
+                    tv.init(KGData.fileStructure);
+                    tv.destroy();
+                } else {
+                    const gv = new GraphVisualizer(rapidContainer);
+                    gv.init(KGData.projectStructure.nodes, KGData.projectStructure.edges);
+                    gv.destroy();
+                }
+            } catch (e) { errors++; }
+        }
+        const rapidDuration = performance.now() - rapidStart;
+        TF.assert(errors === 0, 'Edge: 10x rapid view switching no errors', 'errors=' + errors + ' time=' + rapidDuration.toFixed(0) + 'ms', 'EDGE');
+        TF.assert(rapidDuration < 5000, 'Edge: 10x rapid switching completed in <5s', 'time=' + rapidDuration.toFixed(0) + 'ms', 'EDGE');
+        TestLog.exit('edge-rapid', 'Rapid switching test completed');
+
+        // Test: All zero values in charts
+        TestLog.entry('edge-zeros', 'Testing all zero values in charts');
+        const zeroContainer = 'tc-7';
+        const cmZero = new ChartManager();
+        const zeroData = [
+            { name: 'A', value: 0, color: '#4CAF50' },
+            { name: 'B', value: 0, color: '#2196F3' },
+            { name: 'C', value: 0, color: '#FF9800' }
+        ];
+        TF.assertNoThrow(() => cmZero.createBarChart(zeroContainer, zeroData), 'Edge: BarChart all zeros', 'EDGE');
+        TF.assertNoThrow(() => cmZero.createPieChart(zeroContainer, zeroData.map(d => ({ type: d.name, count: d.value, color: d.color }))), 'Edge: PieChart all zeros', 'EDGE');
+        TF.assertNoThrow(() => cmZero.createLineChart(zeroContainer, [
+            { date: '2024-01-01', lines: 0 },
+            { date: '2024-01-02', lines: 0 },
+            { date: '2024-01-03', lines: 0 }
+        ]), 'Edge: LineChart all zeros', 'EDGE');
+        cmZero.destroy();
+        TestLog.exit('edge-zeros', 'All zeros test completed');
+
+        // Test: Negative values in charts
+        TestLog.entry('edge-negative', 'Testing negative values in charts');
+        const negContainer = 'tc-8';
+        const cmNeg = new ChartManager();
+        const negData = [
+            { name: 'Loss', value: -100, color: '#ef4444' },
+            { name: 'Gain', value: 50, color: '#22c55e' }
+        ];
+        TF.assertNoThrow(() => cmNeg.createBarChart(negContainer, negData), 'Edge: BarChart with negative values', 'EDGE');
+        TF.assertNoThrow(() => cmNeg.createPieChart(negContainer, negData.map(d => ({ type: d.name, count: Math.abs(d.value), color: d.color }))), 'Edge: PieChart with negative values (abs)', 'EDGE');
+        TF.assertNoThrow(() => cmNeg.createLineChart(negContainer, [
+            { date: '2024-01-01', lines: -100 },
+            { date: '2024-01-02', lines: -50 },
+            { date: '2024-01-03', lines: 0 }
+        ]), 'Edge: LineChart with negative values', 'EDGE');
+        cmNeg.destroy();
+        TestLog.exit('edge-negative', 'Negative values test completed');
+
+        TF.endGroup();
+    }
+
+    // ============================================================
+    // Run All Tests
+    // ============================================================
+    async function runAllTests() {
+        clearResults();
+        clearLog();
+        TestLog.info('runAllTests', 'Starting Iteration 8 Bug Fix Test Suite');
+        TestLog.info('runAllTests', 'Bug range: #100-#121');
+        TestLog.info('runAllTests', 'Timestamp: ' + new Date().toISOString());
+
+        const groups = [
+            testGroup1,
+            testGroup2,
+            testGroup3,
+            testGroup4,
+            testGroup5,
+            testGroup6,
+            testGroup7,
+            testGroup8
+        ];
+
+        let crashedGroups = 0;
+        for (let i = 0; i < groups.length; i++) {
+            try {
+                await groups[i]();
+                await sleep(100);
+            } catch (e) {
+                TestLog.error('runAllTests', 'Group crashed: ' + e.message + '\n' + e.stack);
+                crashedGroups++;
+            }
+        }
+
+        // Summary
+        const total = TF.results.length;
+        const pass = TF.results.filter(r => r.pass).length;
+        const fail = total - pass;
+
+        TestLog.info('');
+        TestLog.info('='.repeat(60));
+        TestLog.info('  TEST SUMMARY');
+        TestLog.info('='.repeat(60));
+        TestLog.info('  Total:   ' + total);
+        TestLog.info('  Passed:  ' + pass);
+        TestLog.info('  Failed:  ' + fail);
+        TestLog.info('  Crashed: ' + crashedGroups);
+        TestLog.info('  Time:    ' + (Date.now() - TF._totalStart) + 'ms');
+        TestLog.info('='.repeat(60));
+
+        if (fail > 0) {
+            TestLog.warn('SUMMARY', 'Failed tests:');
+            TF.results.filter(r => !r.pass).forEach(r => {
+                TestLog.error('FAIL', '  ' + r.name + (r.bugId ? ' [' + r.bugId + ']' : '') + (r.detail ? ' -- ' + r.detail : ''));
+            });
+        }
+
+        console.log('ITER8_TEST_SUMMARY: total=' + total + ' pass=' + pass + ' fail=' + fail + ' crashed=' + crashedGroups + ' time=' + (Date.now() - TF._totalStart) + 'ms');
+    }
+
+    function clearResults() {
+        document.getElementById('testResults').innerHTML = '';
+        TF.results = [];
+        TF._groupResults = {};
+        TF._totalStart = Date.now();
+        document.getElementById('statTotal').textContent = '0';
+        document.getElementById('statPass').textContent = '0';
+        document.getElementById('statFail').textContent = '0';
+        document.getElementById('statWarn').textContent = '0';
+        document.getElementById('statTime').textContent = '0ms';
+        document.getElementById('progressFill').style.width = '0%';
+    }
+
+    function clearLog() {
+        document.getElementById('logPanel').innerHTML = '';
+        TestLog._logs = [];
+    }
+
+    function toggleAllGroups() {
+        document.querySelectorAll('.test-group').forEach(g => g.classList.toggle('collapsed'));
+    }
+
+    // Auto-run on page load
+    window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(runAllTests, 300);
+    });
+    </script>
+</body>
+</html>

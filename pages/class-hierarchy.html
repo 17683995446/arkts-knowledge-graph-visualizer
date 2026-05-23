@@ -498,7 +498,6 @@
     <script src="../js/data.js"></script>
     <script src="../js/graph.js?v=50"></script>
     <script>
-        let hierarchyVisualizer = null;
         let networkVisualizer = null;
         let currentView = 'tree';
 
@@ -700,6 +699,10 @@
                 }
                 initTreeView();
             } else {
+                // Bug #105 fix: Clean up D3 tree SVG and zoom events before network init
+                const treeContainer = d3.select('#classHierarchyGraph');
+                treeContainer.selectAll('*').remove();
+                treeContainer.on('.zoom', null);
                 initNetworkView();
             }
         }
@@ -710,6 +713,20 @@
             
             if (networkVisualizer && currentView === 'network') {
                 networkVisualizer.searchNodes(query);
+            } else if (currentView === 'tree') {
+                // Bug #106 fix: Highlight matching nodes in tree view
+                const allNodes = d3.select('#classHierarchyGraph').selectAll('.node');
+                allNodes.select('circle').style('stroke', '#1e293b').style('stroke-width', 2);
+                allNodes.select('text').style('fill', '#f1f5f9').style('font-weight', 'normal');
+                
+                const lowerQuery = query.toLowerCase();
+                allNodes.each(function(d) {
+                    const label = d.data.label || '';
+                    if (label.toLowerCase().includes(lowerQuery)) {
+                        d3.select(this).select('circle').style('stroke', '#f59e0b').style('stroke-width', 4);
+                        d3.select(this).select('text').style('fill', '#f59e0b').style('font-weight', 'bold');
+                    }
+                });
             }
         }
 
@@ -732,16 +749,21 @@
         // Bug #39修复: 添加防抖函数
         function debounce(fn, delay) {
             let timer = null;
-            return function(...args) {
+            const debounced = function(...args) {
                 clearTimeout(timer);
                 timer = setTimeout(() => fn.apply(this, args), delay);
             };
+            debounced.cancel = function() { clearTimeout(timer); timer = null; };
+            return debounced;
         }
 
         // 处理窗口大小变化（带防抖）
         window.addEventListener('resize', debounce(() => {
             if (currentView === 'tree') {
+                // Just re-render tree (D3 tree is lightweight)
                 initTreeView();
+            } else if (networkVisualizer && currentView === 'network') {
+                networkVisualizer.fit();
             }
         }, 250));
     </script>

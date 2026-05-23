@@ -419,6 +419,7 @@
     <script>
         let treeVisualizer = null;
         let sunburstVisualizer = null;
+        let treemapChartManager = null;
         let currentView = 'tree';
 
         // 初始化页面
@@ -450,8 +451,12 @@
 
         // 初始化矩形树图
         function initTreemapView() {
-            const chartManager = new ChartManager();
-            chartManager.createTreemap('fileTreemapView', KGData.fileStructure);
+            if (treemapChartManager) {
+                treemapChartManager.destroy();
+                treemapChartManager = null;
+            }
+            treemapChartManager = new ChartManager();
+            treemapChartManager.createTreemap('fileTreemapView', KGData.fileStructure);
         }
 
         // 切换视图
@@ -518,10 +523,12 @@
         // Bug #39修复: 添加防抖函数
         function debounce(fn, delay) {
             let timer = null;
-            return function(...args) {
+            const debounced = function(...args) {
                 clearTimeout(timer);
                 timer = setTimeout(() => fn.apply(this, args), delay);
             };
+            debounced.cancel = function() { clearTimeout(timer); timer = null; };
+            return debounced;
         }
 
         // 处理窗口大小变化（带防抖）
@@ -530,8 +537,12 @@
                 // Bug #55修复: 防止offsetWidth为0
                 const w = document.getElementById('fileTreeView').offsetWidth;
                 if (w > 0) {
-                    treeVisualizer.options.width = w;
-                    treeVisualizer.init(KGData.fileStructure);
+                    if (treeVisualizer.root) {
+                        treeVisualizer.update(treeVisualizer.root);
+                    } else {
+                        treeVisualizer.options.width = w;
+                        treeVisualizer.init(KGData.fileStructure);
+                    }
                 }
             }
         }, 250));
