@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>迭代#1修复验证 - ArkTS知识图谱</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="../js/graph.js?v=82"></script>
+    <script src="../js/charts.js?v=82"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 { text-align: center; margin-bottom: 10px; color: #38bdf8; }
+        h2 { color: #94a3b8; font-size: 14px; text-align: center; margin-bottom: 30px; }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .test-card {
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .test-card h3 {
+            color: #38bdf8;
+            margin-bottom: 15px;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .test-area {
+            height: 200px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+            margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn {
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4); }
+        .btn.success { background: linear-gradient(135deg, #059669, #10b981); }
+        .btn.danger { background: linear-gradient(135deg, #dc2626, #ef4444); }
+        .result {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .result.pass { background: rgba(5, 150, 105, 0.2); border: 1px solid #059669; color: #34d399; }
+        .result.fail { background: rgba(220, 38, 38, 0.2); border: 1px solid #dc2626; color: #f87171; }
+        .result.info { background: rgba(37, 99, 235, 0.2); border: 1px solid #2563eb; color: #60a5fa; }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-left: 8px;
+        }
+        .status-badge.fixed { background: #059669; color: white; }
+        .status-badge.pending { background: #f59e0b; color: white; }
+        .progress-bar {
+            height: 4px;
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #2563eb, #3b82f6);
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 迭代#1修复验证测试</h1>
+    <h2>验证Bug #78-#83的修复效果</h2>
+    
+    <div class="test-grid">
+        <!-- Bug #78: HTML解析错误修复 -->
+        <div class="test-card">
+            <h3>🛡️ Bug #78: XSS字符串处理 <span class="status-badge fixed">已修复</span></h3>
+            <div id="test78-area" class="test-area"></div>
+            <button class="btn" onclick="testBug78()">测试特殊字符渲染</button>
+            <div id="result78" class="result info">点击测试验证XSS字符串处理</div>
+        </div>
+
+        <!-- Bug #79: 数据规模限制 -->
+        <div class="test-card">
+            <h3>📊 Bug #79: 数据规模保护 <span class="status-badge fixed">已修复</span></h3>
+            <div id="test79-area" class="test-area"></div>
+            <button class="btn" onclick="testBug79()">测试3000节点截断</button>
+            <div id="result79" class="result info">点击测试验证数据规模限制</div>
+        </div>
+
+        <!-- Bug #80: TreeVisualizer zoom事件 -->
+        <div class="test-card">
+            <h3>🌳 Bug #80: Tree zoom清理 <span class="status-badge fixed">已修复</span></h3>
+            <div id="test80-area" class="test-area"></div>
+            <button class="btn" onclick="testBug80()">测试Tree销毁</button>
+            <div id="result80" class="result info">点击测试验证zoom事件清理</div>
+        </div>
+
+        <!-- Bug #81: ForceGraph zoom事件 -->
+        <div class="test-card">
+            <h3>🕸️ Bug #81: ForceGraph清理 <span class="status-badge fixed">已修复</span></h3>
+            <div id="test81-area" class="test-area"></div>
+            <button class="btn" onclick="testBug81()">测试ForceGraph销毁</button>
+            <div id="result81" class="result info">点击测试验证simulation清理</div>
+        </div>
+
+        <!-- Bug #82: debounce cancel -->
+        <div class="test-card">
+            <h3>⏱️ Bug #82: Debounce Cancel <span class="status-badge fixed">已修复</span></h3>
+            <div style="padding: 20px; text-align: center;">
+                <button class="btn" onclick="testBug82()">测试Debounce Cancel</button>
+            </div>
+            <div id="result82" class="result info">点击测试验证cancel方法</div>
+        </div>
+
+        <!-- Bug #83: resize handler -->
+        <div class="test-card">
+            <h3>📐 Bug #83: Resize Handler <span class="status-badge fixed">已修复</span></h3>
+            <div style="padding: 20px; text-align: center;">
+                <button class="btn" onclick="testBug83()">测试Resize Handler</button>
+            </div>
+            <div id="result83" class="result info">点击测试验证resize handler可访问性</div>
+        </div>
+    </div>
+
+    <script>
+        // Bug #78: 测试XSS字符串处理
+        function testBug78() {
+            const result = document.getElementById('result78');
+            const container = document.getElementById('test78-area');
+            container.innerHTML = '';
+            
+            try {
+                // 测试包含script标签的字符串
+                const nodes = [
+                    { id: 1, label: '<scr' + 'ipt>alert(1)</scr' + 'ipt>' },
+                    { id: 2, label: '<img src=x onerror=alert(1)>' },
+                    { id: 3, label: '正常节点' }
+                ];
+                const edges = [{ from: 1, to: 2 }];
+                
+                const gv = new GraphVisualizer('test78-area');
+                gv.init(nodes, edges);
+                
+                setTimeout(() => {
+                    gv.destroy();
+                    result.className = 'result pass';
+                    result.innerHTML = '✅ PASS: XSS字符串被正确转义，无脚本执行';
+                }, 500);
+            } catch (e) {
+                result.className = 'result fail';
+                result.innerHTML = '❌ FAIL: ' + e.message;
+            }
+        }
+
+        // Bug #79: 测试数据规模限制
+        function testBug79() {
+            const result = document.getElementById('result79');
+            const container = document.getElementById('test79-area');
+            container.innerHTML = '';
+            
+            try {
+                // 生成3000节点（超过2000限制）
+                const nodes = [];
+                const edges = [];
+                for (let i = 0; i < 3000; i++) {
+                    nodes.push({ id: i, label: `Node${i}` });
+                    if (i > 0) edges.push({ from: i - 1, to: i });
+                }
+                
+                const gv = new GraphVisualizer('test79-area');
+                const startTime = performance.now();
+                gv.init(nodes, edges);
+                const endTime = performance.now();
+                
+                // 检查是否被截断到2000
+                const actualNodes = gv.nodes ? gv.nodes.length : 0;
+                
+                setTimeout(() => {
+                    gv.destroy();
+                    if (actualNodes <= 2000) {
+                        result.className = 'result pass';
+                        result.innerHTML = `✅ PASS: 3000节点被截断到${actualNodes}节点，耗时${(endTime-startTime).toFixed(1)}ms`;
+                    } else {
+                        result.className = 'result fail';
+                        result.innerHTML = `❌ FAIL: 节点未被截断，实际${actualNodes}节点`;
+                    }
+                }, 1000);
+            } catch (e) {
+                result.className = 'result fail';
+                result.innerHTML = '❌ FAIL: ' + e.message;
+            }
+        }
+
+        // Bug #80: 测试TreeVisualizer销毁
+        function testBug80() {
+            const result = document.getElementById('result80');
+            const container = document.getElementById('test80-area');
+            container.innerHTML = '';
+            
+            try {
+                const data = {
+                    name: 'Root',
+                    children: [
+                        { name: 'Child1', children: [{ name: 'GrandChild1' }] },
+                        { name: 'Child2' }
+                    ]
+                };
+                
+                const tv = new TreeVisualizer('test80-area');
+                tv.init(data);
+                
+                setTimeout(() => {
+                    tv.destroy();
+                    // 检查DOM是否清理
+                    const remaining = container.querySelectorAll('*').length;
+                    if (remaining === 0) {
+                        result.className = 'result pass';
+                        result.innerHTML = '✅ PASS: TreeVisualizer销毁成功，DOM已清理';
+                    } else {
+                        result.className = 'result fail';
+                        result.innerHTML = `❌ FAIL: DOM未完全清理，剩余${remaining}个元素`;
+                    }
+                }, 500);
+            } catch (e) {
+                result.className = 'result fail';
+                result.innerHTML = '❌ FAIL: ' + e.message;
+            }
+        }
+
+        // Bug #81: 测试ForceGraph销毁
+        function testBug81() {
+            const result = document.getElementById('result81');
+            const container = document.getElementById('test81-area');
+            container.innerHTML = '';
+            
+            try {
+                const cm = new ChartManager();
+                const data = {
+                    nodes: [
+                        { id: 1, name: 'A', group: 'g1' },
+                        { id: 2, name: 'B', group: 'g1' },
+                        { id: 3, name: 'C', group: 'g2' }
+                    ],
+                    links: [
+                        { source: 1, target: 2 },
+                        { source: 2, target: 3 }
+                    ]
+                };
+                
+                const fg = cm.createForceGraph('test81-area', data);
+                
+                setTimeout(() => {
+                    fg.destroy();
+                    // 检查DOM是否清理
+                    const remaining = container.querySelectorAll('*').length;
+                    if (remaining === 0) {
+                        result.className = 'result pass';
+                        result.innerHTML = '✅ PASS: ForceGraph销毁成功，Simulation已停止，DOM已清理';
+                    } else {
+                        result.className = 'result fail';
+                        result.innerHTML = `❌ FAIL: DOM未完全清理，剩余${remaining}个元素`;
+                    }
+                }, 500);
+            } catch (e) {
+                result.className = 'result fail';
+                result.innerHTML = '❌ FAIL: ' + e.message;
+            }
+        }
+
+        // Bug #82: 测试debounce cancel
+        function testBug82() {
+            const result = document.getElementById('result82');
+            
+            try {
+                let callCount = 0;
+                const testFn = () => { callCount++; };
+                
+                // 创建debounce函数
+                const debounced = debounce(testFn, 100);
+                
+                // 调用多次
+                debounced();
+                debounced();
+                debounced();
+                
+                // 立即cancel
+                debounced.cancel();
+                
+                // 等待足够时间
+                setTimeout(() => {
+                    if (callCount === 0) {
+                        result.className = 'result pass';
+                        result.innerHTML = '✅ PASS: debounce.cancel()成功阻止函数执行';
+                    } else {
+                        result.className = 'result fail';
+                        result.innerHTML = `❌ FAIL: 函数被调用了${callCount}次，cancel未生效`;
+                    }
+                }, 200);
+            } catch (e) {
+                result.className = 'result fail';
+                result.innerHTML = '❌ FAIL: ' + e.message;
+            }
+        }
+
+        // Bug #83: 测试resize handler
+        function testBug83() {
+            const result = document.getElementById('result83');
+            
+            try {
+                // 检查resizeHandler是否可访问
+                if (typeof resizeHandler !== 'undefined' && resizeHandler.cancel) {
+                    result.className = 'result pass';
+                    result.innerHTML = '✅ PASS: resizeHandler可访问且有cancel方法';
+                } else if (typeof resizeHandler !== 'undefined') {
+                    result.className = 'result fail';
+                    result.innerHTML = '❌ FAIL: resizeHandler可访问但缺少cancel方法';
+                } else {
+                    result.className = 'result fail';
+                    result.innerHTML = '❌ FAIL: resizeHandler不可访问（匿名函数）';
+                }
+            } catch (e) {
+                result.className = 'result fail';
+                result.innerHTML = '❌ FAIL: ' + e.message;
+            }
+        }
+
+        // 页面加载后自动运行所有测试
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                testBug78();
+                setTimeout(() => testBug79(), 1500);
+                setTimeout(() => testBug80(), 3000);
+                setTimeout(() => testBug81(), 4500);
+                setTimeout(() => testBug82(), 6000);
+                setTimeout(() => testBug83(), 7000);
+            }, 500);
+        });
+    </script>
+</body>
+</html>

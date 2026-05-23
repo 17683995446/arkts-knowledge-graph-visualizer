@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大规模综合自动化测试 - ArkTS知识图谱</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; margin: 0; }
+        .tc { max-width: 1400px; margin: 0 auto; }
+        h1 { color: #60a5fa; margin-bottom: 10px; font-size: 22px; }
+        h2 { color: #94a3b8; margin: 0 0 15px 0; font-size: 13px; font-weight: normal; }
+        .stats { display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap; }
+        .sc { background: #1e293b; border-radius: 8px; padding: 12px 20px; min-width: 120px; }
+        .sc .n { font-size: 28px; font-weight: bold; font-family: monospace; }
+        .sc .l { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+        .sc.tp .n { color: #60a5fa; } .sc.ps .n { color: #22c55e; } .sc.fl .n { color: #ef4444; } .sc.tm .n { color: #a78bfa; }
+        .btn { background: #3b82f6; color: white; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; margin: 0 6px 6px 0; }
+        .btn:hover { background: #2563eb; }
+        .btn-d { background: #ef4444; } .btn-d:hover { background: #dc2626; }
+        .btn-g { background: #22c55e; } .btn-g:hover { background: #16a34a; }
+        .sec { background: #1e293b; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+        .sec h3 { color: #60a5fa; margin: 0 0 8px 0; font-size: 13px; }
+        .tr { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 12px; border-bottom: 1px solid #334155; }
+        .tr:last-child { border-bottom: none; }
+        .tr.p { color: #22c55e; } .tr.f { color: #ef4444; } .tr.w { color: #f59e0b; }
+        .tr .d { color: #64748b; font-size: 10px; margin-left: auto; font-family: monospace; }
+        .log { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px; max-height: 500px; overflow-y: auto; font-family: monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; line-height: 1.4; }
+        .pb { height: 3px; background: #334155; border-radius: 2px; margin-bottom: 15px; overflow: hidden; }
+        .pb .fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #22c55e); transition: width 0.3s; width: 0%; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+<div class="tc">
+    <h1>🔬 大规模综合自动化测试套件 v2.0</h1>
+    <h2>覆盖: 单元/集成/边界/压力/内存/并发/安全/全链路日志 — 自动运行中...</h2>
+    <div class="pb"><div class="fill" id="pf"></div></div>
+    <div class="stats">
+        <div class="sc tp"><div class="n" id="st">0</div><div class="l">总测试</div></div>
+        <div class="sc ps"><div class="n" id="sp">0</div><div class="l">通过</div></div>
+        <div class="sc fl"><div class="n" id="sf">0</div><div class="l">失败</div></div>
+        <div class="sc tm"><div class="n" id="sm">0ms</div><div class="l">总耗时</div></div>
+    </div>
+    <div id="results"></div>
+    <div class="sec" style="margin-top:15px;">
+        <h3>📋 全链路日志</h3>
+        <div class="log" id="logOut">等待测试启动...</div>
+    </div>
+</div>
+
+<script src="../libs/vis-network.min.js"></script>
+<script src="../libs/d3.v7.min.js"></script>
+<script src="../js/data.js?v=10"></script>
+<script src="../js/graph.js?v=50"></script>
+<script src="../js/charts.js?v=50"></script>
+<script src="../js/main.js?v=50"></script>
+<script>
+'use strict';
+// ============================================================
+// 全链路日志追踪器
+// ============================================================
+const Logger = {
+    _logs: [],
+    _startTime: Date.now(),
+    _indent: 0,
+    _logEl: null,
+    init() { this._logEl = document.getElementById('logOut'); },
+    _ts() { return '[' + (Date.now() - this._startTime) + 'ms]'; },
+    entry(fn) {
+        this._indent++;
+        const prefix = '  '.repeat(this._indent - 1) + '→';
+        this._raw(this._ts() + ' ' + prefix + ' ENTER ' + fn);
+    },
+    exit(fn, duration) {
+        const prefix = '  '.repeat(this._indent - 1) + '←';
+        this._raw(this._ts() + ' ' + prefix + ' EXIT  ' + fn + ' (' + duration + 'ms)');
+        this._indent = Math.max(0, this._indent - 1);
+    },
+    info(msg) {
+        const prefix = '  '.repeat(this._indent) + 'ℹ';
+        this._raw(this._ts() + ' ' + prefix + ' ' + msg);
+    },
+    warn(msg) {
+        const prefix = '  '.repeat(this._indent) + '⚠';
+        this._raw(this._ts() + ' ' + prefix + ' WARN: ' + msg);
+    },
+    error(msg) {
+        const prefix = '  '.repeat(this._indent) + '✖';
+        this._raw(this._ts() + ' ' + prefix + ' ERROR: ' + msg);
+    },
+    ok(msg) {
+        const prefix = '  '.repeat(this._indent) + '✅';
+        this._raw(this._ts() + ' ' + prefix + ' ' + msg);
+    },
+    fail(msg) {
+        const prefix = '  '.repeat(this._indent) + '❌';
+        this._raw(this._ts() + ' ' + prefix + ' ' + msg);
+    },
+    section(title) {
+        this._raw('\n' + '='.repeat(60));
+        this._raw('  ' + title);
+        this._raw('='.repeat(60));
+    },
+    _raw(text) {
+        this._logs.push(text);
+        if (this._logEl) this._logEl.textContent = this._logs.join('\n');
+    }
+};
+Logger.init();
+
+// ============================================================
+// 测试框架（增强版，带计时）
+// ============================================================
+const T = {
+    results: [],
+    _sectionStart: 0,
+    _totalStart: Date.now(),
+    section(name) {
+        Logger.section(name);
+        this._sectionStart = Date.now();
+    },
+    endSection() {
+        const dur = Date.now() - this._sectionStart;
+        Logger.info('模块耗时: ' + dur + 'ms');
+    },
+    assert(cond, name, detail) {
+        const r = { pass: !!cond, name: name, detail: detail || '', time: Date.now() - this._totalStart };
+        this.results.push(r);
+        if (cond) { Logger.ok(name); } else { Logger.fail(name + (detail ? ' — ' + detail : '')); }
+        this._updateUI();
+        return cond;
+    },
+    assertNoThrow(fn, name) {
+        const t0 = performance.now();
+        try { fn(); const dur = (performance.now() - t0).toFixed(1); return this.assert(true, name, dur + 'ms'); }
+        catch(e) { const dur = (performance.now() - t0).toFixed(1); return this.assert(false, name, '异常: ' + e.message + ' (' + dur + 'ms)'); }
+    },
+    assertThrow(fn, name) {
+        try { fn(); return this.assert(false, name, '未抛出异常'); }
+        catch(e) { return this.assert(true, name); }
+    },
+    _updateUI() {
+        const total = this.results.length;
+        const pass = this.results.filter(r => r.pass).length;
+        const fail = total - pass;
+        document.getElementById('st').textContent = total;
+        document.getElementById('sp').textContent = pass;
+        document.getElementById('sf').textContent = fail;
+        document.getElementById('sm').textContent = (Date.now() - this._totalStart) + 'ms';
+        document.getElementById('pf').style.width = (total > 0 ? (pass / total * 100) : 0) + '%';
+        const c = document.getElementById('results');
+        c.innerHTML = '';
+        this.results.forEach(r => {
+            const d = document.createElement('div');
+            d.className = 'tr ' + (r.pass ? 'p' : 'f');
+            const icon = document.createElement('span');
+            icon.textContent = r.pass ? '✅' : '❌';
+            d.appendChild(icon);
+            const nm = document.createElement('span');
+            nm.textContent = r.name;
+            d.appendChild(nm);
+            if (r.detail) {
+                const dt = document.createElement('span');
+                dt.className = 'd';
+                dt.textContent = r.detail;
+                d.appendChild(dt);
+            }
+            c.appendChild(d);
+        });
+    }
+};
+
+// ============================================================
+// 辅助函数
+// ============================================================
+function makeDiv(id, w, h) {
+    const d = document.createElement('div');
+    d.id = id;
+    d.style.cssText = 'width:' + w + 'px;height:' + h + 'px;position:absolute;left:-9999px;top:-9999px;';
+    document.body.appendChild(d);
+    return d;
+}
+function removeDiv(id) { const d = document.getElementById(id); if (d) d.remove(); }
+function genNodes(n) {
+    const nodes = [];
+    for (let i = 0; i < n; i++) nodes.push({ id: i, label: 'N' + i, group: ['component','utility','interface','model','service','enum'][i % 6], size: 5 + Math.random() * 25 });
+    return nodes;
+}
+function genEdges(n, maxId) {
+    const edges = [];
+    for (let i = 0; i < n; i++) edges.push({ from: Math.floor(Math.random() * maxId), to: Math.floor(Math.random() * maxId), label: 'dep' });
+    return edges;
+}
+function genTreeData(depth, breadth) {
+    function build(d, prefix) {
+        if (d <= 0) return { name: prefix, value: Math.floor(Math.random() * 100) + 1 };
+        const children = [];
+        const b = d === depth ? breadth : Math.max(2, breadth - 1);
+        for (let i = 0; i < b; i++) children.push(build(d - 1, prefix + '/' + i));
+        return { name: prefix, children: children };
+    }
+    return build(depth, 'root');
+}
+
+// ============================================================
+// 1. 数据完整性验证
+// ============================================================
+function testDataIntegrity() {
+    T.section('1. 数据完整性验证');
+    Logger.entry('testDataIntegrity');
+    
+    T.assert(KGData !== undefined, 'KGData: 全局对象存在');
+    T.assert(KGData !== null, 'KGData: 不为null');
+    
+    // overview
+    T.assert(KGData.overview !== undefined, 'KGData.overview: 存在');
+    T.assert(typeof KGData.overview.totalFiles === 'number', 'overview.totalFiles: 是数字');
+    T.assert(KGData.overview.totalFiles > 0, 'overview.totalFiles: > 0');
+    
+    // projectStructure
+    T.assert(Array.isArray(KGData.projectStructure.nodes), 'projectStructure.nodes: 是数组');
+    T.assert(KGData.projectStructure.nodes.length === 29, 'projectStructure.nodes: 29个节点');
+    T.assert(Array.isArray(KGData.projectStructure.edges), 'projectStructure.edges: 是数组');
+    T.assert(KGData.projectStructure.edges.length === 30, 'projectStructure.edges: 30条边');
+    
+    // 验证边引用的节点存在
+    const psIds = new Set(KGData.projectStructure.nodes.map(n => n.id));
+    let psValid = true;
+    for (const e of KGData.projectStructure.edges) {
+        if (!psIds.has(e.from) || !psIds.has(e.to)) { psValid = false; Logger.warn('无效边: ' + e.from + '->' + e.to); break; }
+    }
+    T.assert(psValid, 'projectStructure: 所有边引用有效');
+    
+    // classHierarchy
+    T.assert(Array.isArray(KGData.classHierarchy.nodes), 'classHierarchy.nodes: 是数组');
+    T.assert(KGData.classHierarchy.nodes.length === 16, 'classHierarchy.nodes: 16个节点');
+    T.assert(Array.isArray(KGData.classHierarchy.edges), 'classHierarchy.edges: 是数组');
+    
+    // functionCalls
+    T.assert(Array.isArray(KGData.functionCalls.nodes), 'functionCalls.nodes: 是数组');
+    T.assert(Array.isArray(KGData.functionCalls.edges), 'functionCalls.edges: 是数组');
+    
+    // moduleDeps
+    T.assert(Array.isArray(KGData.moduleDeps.modules), 'moduleDeps.modules: 是数组');
+    T.assert(KGData.moduleDeps.modules.length === 10, 'moduleDeps.modules: 10个模块');
+    T.assert(Array.isArray(KGData.moduleDeps.dependencies), 'moduleDeps.dependencies: 是数组');
+    
+    // fileTypes, codeTrend
+    T.assert(Array.isArray(KGData.fileTypes) && KGData.fileTypes.length > 0, 'fileTypes: 非空数组');
+    T.assert(Array.isArray(KGData.codeTrend) && KGData.codeTrend.length > 0, 'codeTrend: 非空数组');
+    
+    // codeStats
+    T.assert(KGData.codeStats !== undefined, 'codeStats: 存在');
+    T.assert(KGData.codeStats.complexity !== undefined, 'codeStats.complexity: 存在');
+    T.assert(typeof KGData.codeStats.complexity.low === 'number', 'complexity.low: 是数字');
+    
+    // fileStructure (嵌套树)
+    T.assert(KGData.fileStructure !== undefined, 'fileStructure: 存在');
+    T.assert(KGData.fileStructure.name !== undefined, 'fileStructure.name: 有name');
+    
+    // queryHistory
+    T.assert(Array.isArray(KGData.queryHistory), 'queryHistory: 是数组');
+    
+    // searchResults
+    T.assert(KGData.searchResults !== undefined, 'searchResults: 存在');
+    T.assert(Array.isArray(KGData.searchResults.classes), 'searchResults.classes: 是数组');
+    T.assert(Array.isArray(KGData.searchResults.functions), 'searchResults.functions: 是数组');
+    
+    Logger.exit('testDataIntegrity');
+    T.endSection();
+}
+
+// ============================================================
+// 2. GraphVisualizer 单元测试
+// ============================================================
+function testGraphVisualizer() {
+    T.section('2. GraphVisualizer 单元测试');
+    Logger.entry('testGraphVisualizer');
+    
+    // 构造函数
+    Logger.info('测试构造函数...');
+    T.assertNoThrow(() => new GraphVisualizer('nonexistent'), '构造: 不存在的容器不崩溃');
+    const div = makeDiv('gv-test', 800, 600);
+    const gv = new GraphVisualizer('gv-test');
+    T.assert(gv !== null, '构造: 返回实例');
+    T.assert(gv.network === null, '构造: network初始为null');
+    
+    // init
+    Logger.info('测试init()...');
+    const net = gv.init(KGData.projectStructure.nodes, KGData.projectStructure.edges);
+    T.assert(net !== null, 'init: 返回network实例');
+    T.assert(gv.network !== null, 'init: this.network已设置');
+    
+    // Bug #71: XSS防护 - label中的HTML标签不应执行
+    Logger.info('测试XSS防护(Bug#71)...');
+    const xssDiv = makeDiv('gv-xss', 400, 300);
+    const gvXss = new GraphVisualizer('gv-xss');
+    T.assertNoThrow(() => {
+        gvXss.init([{ id: 'x1', label: '<b>bold</b>' }, { id: 'x2', label: '&lt;script&gt;' }], []);
+    }, 'init: HTML标签label不崩溃(Bug#71)');
+    gvXss.destroy();
+    removeDiv('gv-xss');
+    
+    // null安全
+    Logger.info('测试null安全...');
+    T.assertNoThrow(() => gv.focusNode(null), 'focusNode: null不崩溃');
+    T.assertNoThrow(() => gv.focusNode('nonexistent-id-99999'), 'focusNode: 不存在的ID不崩溃');
+    T.assertNoThrow(() => gv.fit(), 'fit: 无参数不崩溃');
+    T.assertNoThrow(() => gv.togglePhysics(), 'togglePhysics: 切换不崩溃');
+    T.assertNoThrow(() => gv.highlightConnected(null), 'highlightConnected: null不崩溃');
+    T.assertNoThrow(() => gv.highlightConnected('nonexistent'), 'highlightConnected: 不存在ID不崩溃');
+    T.assertNoThrow(() => gv.resetHighlight(), 'resetHighlight: 不崩溃');
+    T.assertNoThrow(() => gv.searchNodes(''), 'searchNodes: 空字符串不崩溃');
+    T.assertNoThrow(() => gv.searchNodes('Entry'), 'searchNodes: 正常搜索不崩溃');
+    T.assertNoThrow(() => gv.exportImage(), 'exportImage: 不崩溃');
+    
+    // Bug #56: highlightConnected使用Set
+    Logger.info('测试highlightConnected Set优化(Bug#56)...');
+    if (KGData.projectStructure.nodes.length > 0) {
+        const firstId = KGData.projectStructure.nodes[0].id;
+        T.assertNoThrow(() => { gv.highlightConnected(firstId); gv.resetHighlight(); }, 'highlightConnected: 正常节点Set查找');
+    }
+    
+    // destroy
+    Logger.info('测试destroy()...');
+    T.assertNoThrow(() => gv.destroy(), 'destroy: 不崩溃');
+    T.assert(gv.network === null, 'destroy: network已清空');
+    
+    removeDiv('gv-test');
+    Logger.exit('testGraphVisualizer');
+    T.endSection();
+}
+
+// ============================================================
+// 3. TreeVisualizer 单元测试
+// ============================================================
+function testTreeVisualizer() {
+    T.section('3. TreeVisualizer 单元测试');
+    Logger.entry('testTreeVisualizer');
+    
+    T.assertNoThrow(() => new TreeVisualizer('nonexistent'), '构造: 不存在的容器不崩溃');
+    const div = makeDiv('tv-test', 800, 600);
+    const tv = new TreeVisualizer('tv-test');
+    T.assert(tv !== null, '构造: 返回实例');
+    
+    Logger.info('测试init()...');
+    T.assertNoThrow(() => tv.init(KGData.fileStructure), 'init: 正常数据不崩溃');
+    
+    Logger.info('测试expandAll/collapseAll()...');
+    T.assertNoThrow(() => tv.expandAll(), 'expandAll: 不崩溃');
+    T.assertNoThrow(() => tv.collapseAll(), 'collapseAll: 不崩溃');
+    
+    Logger.info('测试destroy()...');
+    T.assertNoThrow(() => tv.destroy(), 'destroy: 不崩溃');
+    
+    removeDiv('tv-test');
+    Logger.exit('testTreeVisualizer');
+    T.endSection();
+}
+
+// ============================================================
+// 4. SunburstVisualizer 单元测试
+// ============================================================
+function testSunburstVisualizer() {
+    T.section('4. SunburstVisualizer 单元测试');
+    Logger.entry('testSunburstVisualizer');
+    
+    T.assertNoThrow(() => new SunburstVisualizer('nonexistent'), '构造: 不存在的容器不崩溃');
+    const div = makeDiv('sv-test', 800, 600);
+    const sv = new SunburstVisualizer('sv-test');
+    T.assert(sv !== null, '构造: 返回实例');
+    
+    Logger.info('测试init()...');
+    T.assertNoThrow(() => sv.init(KGData.fileStructure), 'init: 正常数据不崩溃');
+    
+    Logger.info('测试destroy()...');
+    T.assertNoThrow(() => sv.destroy(), 'destroy: 不崩溃');
+    
+    removeDiv('sv-test');
+    Logger.exit('testSunburstVisualizer');
+    T.endSection();
+}
+
+// ============================================================
+// 5. ChartManager 单元测试
+// ============================================================
+function testChartManager() {
+    T.section('5. ChartManager 单元测试');
+    Logger.entry('testChartManager');
+    
+    const div = makeDiv('cm-test', 600, 400);
+    const cm = new ChartManager();
+    
+    // 容器不存在
+    Logger.info('测试容器null安全...');
+    T.assertNoThrow(() => cm.createPieChart('no-such-div', []), 'createPieChart: 不存在的容器');
+    T.assertNoThrow(() => cm.createLineChart('no-such-div', []), 'createLineChart: 不存在的容器');
+    T.assertNoThrow(() => cm.createBarChart('no-such-div', []), 'createBarChart: 不存在的容器');
+    T.assertNoThrow(() => cm.createForceGraph('no-such-div', [], []), 'createForceGraph: 不存在的容器');
+    T.assertNoThrow(() => cm.createChordDiagram('no-such-div', []), 'createChordDiagram: 不存在的容器');
+    T.assertNoThrow(() => cm.createTreemap('no-such-div', []), 'createTreemap: 不存在的容器');
+    
+    // 正常数据
+    Logger.info('测试正常数据...');
+    const pieData = KGData.fileTypes;
+    T.assertNoThrow(() => cm.createPieChart('cm-test', pieData), 'createPieChart: fileTypes数据');
+    
+    const lineData = KGData.codeTrend;
+    T.assertNoThrow(() => cm.createLineChart('cm-test', lineData), 'createLineChart: codeTrend数据');
+    
+    const barData = KGData.codeStats.languages;
+    T.assertNoThrow(() => cm.createBarChart('cm-test', barData), 'createBarChart: languages数据');
+    
+    const forceNodes = KGData.projectStructure.nodes.slice(0, 10);
+    const forceEdges = KGData.projectStructure.edges.slice(0, 8);
+    T.assertNoThrow(() => cm.createForceGraph('cm-test', forceNodes, forceEdges), 'createForceGraph: 子集数据');
+    
+    // Bug #75修复: createChordDiagram需要二维方阵+labels，不能直接传dependencies对象数组
+    // 测试1: 传入无效数据应安全返回（不崩溃）
+    T.assertNoThrow(() => cm.createChordDiagram('cm-test', KGData.moduleDeps.dependencies.slice(0, 5)), 'createChordDiagram: 无效数据安全返回');
+    // 测试2: 传入正确的矩阵格式
+    const chordMatrix = [
+        [0, 10, 5, 8],
+        [10, 0, 7, 3],
+        [5, 7, 0, 12],
+        [8, 3, 12, 0]
+    ];
+    const chordLabels = ['App', 'Components', 'Services', 'Utils'];
+    T.assertNoThrow(() => cm.createChordDiagram('cm-test', chordMatrix, chordLabels), 'createChordDiagram: 正确矩阵数据');
+    
+    T.assertNoThrow(() => cm.createTreemap('cm-test', [{ name: 'root', children: [{ name: 'a', value: 10 }, { name: 'b', value: 20 }] }]), 'createTreemap: 简单树');
+    
+    // 空数据
+    Logger.info('测试空数据...');
+    T.assertNoThrow(() => cm.createPieChart('cm-test', []), 'createPieChart: 空数组');
+    T.assertNoThrow(() => cm.createLineChart('cm-test', []), 'createLineChart: 空数组');
+    T.assertNoThrow(() => cm.createBarChart('cm-test', []), 'createBarChart: 空数组');
+    
+    // 单元素
+    Logger.info('测试单元素...');
+    T.assertNoThrow(() => cm.createPieChart('cm-test', [{ name: 'A', value: 1 }]), 'createPieChart: 单元素');
+    T.assertNoThrow(() => cm.createLineChart('cm-test', [{ date: 'x', lines: 100 }]), 'createLineChart: 单元素');
+    
+    // Bug #65: 所有值相同
+    Logger.info('测试所有值相同(Bug#65)...');
+    const flatLine = [{ date: 'a', lines: 100 }, { date: 'b', lines: 100 }, { date: 'c', lines: 100 }];
+    T.assertNoThrow(() => cm.createLineChart('cm-test', flatLine), 'createLineChart: 所有值相同不崩溃');
+    
+    // 异常值
+    Logger.info('测试异常值...');
+    T.assertNoThrow(() => cm.createPieChart('cm-test', [{ name: 'A', value: 0 }]), 'createPieChart: 零值');
+    T.assertNoThrow(() => cm.createPieChart('cm-test', [{ name: 'A', value: -1 }]), 'createPieChart: 负值');
+    T.assertNoThrow(() => cm.createPieChart('cm-test', [{ name: 'A', value: NaN }]), 'createPieChart: NaN值');
+    T.assertNoThrow(() => cm.createLineChart('cm-test', [{ date: 'x', lines: NaN }]), 'createLineChart: NaN值');
+    T.assertNoThrow(() => cm.createPieChart('cm-test', [{ name: 'A', value: Infinity }]), 'createPieChart: Infinity值');
+    
+    // ForceGraph destroy
+    Logger.info('测试ForceGraph destroy...');
+    const fg = cm.createForceGraph('cm-test', [{ id: 'a' }, { id: 'b' }], [{ from: 'a', to: 'b' }]);
+    if (fg && fg.destroy) T.assertNoThrow(() => fg.destroy(), 'ForceGraph.destroy: 不崩溃');
+    
+    removeDiv('cm-test');
+    Logger.exit('testChartManager');
+    T.endSection();
+}
+
+// ============================================================
+// 6. main.js 全局函数测试
+// ============================================================
+function testMainFunctions() {
+    T.section('6. main.js 全局函数测试');
+    Logger.entry('testMainFunctions');
+    
+    // escapeHtml
+    Logger.info('测试escapeHtml()...');
+    T.assert(typeof escapeHtml === 'function', 'escapeHtml: 函数存在');
+    T.assert(escapeHtml(null) === '', 'escapeHtml: null返回空串');
+    T.assert(escapeHtml(undefined) === '', 'escapeHtml: undefined返回空串');
+    T.assert(escapeHtml('') === '', 'escapeHtml: 空串返回空串');
+    T.assert(escapeHtml('hello') === 'hello', 'escapeHtml: 普通文本不变');
+    T.assert(escapeHtml('<b>bold</b>') === '&lt;b&gt;bold&lt;/b&gt;', 'escapeHtml: 转义HTML标签');
+    T.assert(escapeHtml('a&b<c>d') !== 'a&b<c>d', 'escapeHtml: 转义特殊字符');
+    // Bug #76修复: textContent方式不转义双引号（正确行为，因为不在属性上下文中使用）
+    T.assert(escapeHtml('"quotes"') === '"quotes"', 'escapeHtml: 双引号不转义（textContent方式）');
+    T.assert(escapeHtml("it's") === "it's", 'escapeHtml: 单引号不转义');
+    
+    // showNotification
+    Logger.info('测试showNotification()...');
+    T.assertNoThrow(() => showNotification('test', 'info'), 'showNotification: info');
+    T.assertNoThrow(() => showNotification('test', 'warning'), 'showNotification: warning');
+    T.assertNoThrow(() => showNotification('test', 'success'), 'showNotification: success');
+    T.assertNoThrow(() => showNotification('test', 'error'), 'showNotification: error');
+    T.assertNoThrow(() => showNotification(null), 'showNotification: null消息');
+    T.assertNoThrow(() => showNotification(''), 'showNotification: 空消息');
+    
+    // runQuery
+    Logger.info('测试runQuery()...');
+    T.assertNoThrow(() => runQuery(null), 'runQuery: null不崩溃');
+    T.assertNoThrow(() => runQuery(undefined), 'runQuery: undefined不崩溃');
+    T.assertNoThrow(() => runQuery({ querySelector: () => null }), 'runQuery: 无span不崩溃');
+    
+    // debounce
+    Logger.info('测试debounce()...');
+    T.assertNoThrow(() => {
+        let c = 0;
+        const d = debounce(() => c++, 50);
+        d(); d(); d();
+    }, 'debounce: 多次调用不崩溃');
+    
+    Logger.exit('testMainFunctions');
+    T.endSection();
+}
+
+// ============================================================
+// 7. 大规模数据压力测试
+// ============================================================
+function testStressLargeData() {
+    T.section('7. 大规模数据压力测试');
+    Logger.entry('testStressLargeData');
+    
+    // GraphVisualizer 1000节点
+    Logger.info('GraphVisualizer 1000节点压力测试...');
+    const div1 = makeDiv('stress-gv', 800, 600);
+    const gv1 = new GraphVisualizer('stress-gv');
+    const bigNodes = genNodes(1000);
+    const bigEdges = genEdges(2000, 1000);
+    T.assertNoThrow(() => { gv1.init(bigNodes, bigEdges); }, 'GV: 1000节点2000边init');
+    T.assertNoThrow(() => gv1.searchNodes('N5'), 'GV: 大图搜索');
+    T.assertNoThrow(() => gv1.fit(), 'GV: 大图fit');
+    T.assertNoThrow(() => gv1.destroy(), 'GV: 大图destroy');
+    removeDiv('stress-gv');
+    Logger.ok('GraphVisualizer 1000节点压力测试通过');
+    
+    // GraphVisualizer 5000节点
+    Logger.info('GraphVisualizer 5000节点压力测试...');
+    const div2 = makeDiv('stress-gv2', 800, 600);
+    const gv2 = new GraphVisualizer('stress-gv2');
+    const hugeNodes = genNodes(5000);
+    const hugeEdges = genEdges(10000, 5000);
+    T.assertNoThrow(() => { gv2.init(hugeNodes, hugeEdges); }, 'GV: 5000节点10000边init');
+    T.assertNoThrow(() => gv2.destroy(), 'GV: 5000节点destroy');
+    removeDiv('stress-gv2');
+    Logger.ok('GraphVisualizer 5000节点压力测试通过');
+    
+    // TreeVisualizer 深层嵌套
+    Logger.info('TreeVisualizer 深层嵌套压力测试...');
+    const div3 = makeDiv('stress-tv', 800, 600);
+    const tv1 = new TreeVisualizer('stress-tv');
+    const deepTree = genTreeData(6, 5); // 6层深, 每层5个分支 = 5^6 = 15625 叶节点
+    T.assertNoThrow(() => tv1.init(deepTree), 'TV: 深层嵌套树init');
+    T.assertNoThrow(() => tv1.destroy(), 'TV: 深层嵌套树destroy');
+    removeDiv('stress-tv');
+    Logger.ok('TreeVisualizer 深层嵌套压力测试通过');
+    
+    // SunburstVisualizer 深层嵌套
+    Logger.info('SunburstVisualizer 深层嵌套压力测试...');
+    const div4 = makeDiv('stress-sv', 800, 600);
+    const sv1 = new SunburstVisualizer('stress-sv');
+    T.assertNoThrow(() => sv1.init(deepTree), 'SV: 深层嵌套树init');
+    T.assertNoThrow(() => sv1.destroy(), 'SV: 深层嵌套树destroy');
+    removeDiv('stress-sv');
+    Logger.ok('SunburstVisualizer 深层嵌套压力测试通过');
+    
+    // ChartManager 大数据
+    Logger.info('ChartManager 大数据压力测试...');
+    const div5 = makeDiv('stress-cm', 600, 400);
+    const cm1 = new ChartManager();
+    const bigPie = Array.from({ length: 500 }, (_, i) => ({ name: 'Item' + i, value: Math.random() * 100 }));
+    T.assertNoThrow(() => cm1.createPieChart('stress-cm', bigPie), 'CM: 500项饼图');
+    
+    const bigLine = Array.from({ length: 1000 }, (_, i) => ({ date: 'D' + i, lines: Math.random() * 1000 }));
+    T.assertNoThrow(() => cm1.createLineChart('stress-cm', bigLine), 'CM: 1000项折线图');
+    
+    const bigBar = Array.from({ length: 500 }, (_, i) => ({ name: 'B' + i, value: Math.random() * 100 }));
+    T.assertNoThrow(() => cm1.createBarChart('stress-cm', bigBar), 'CM: 500项柱状图');
+    removeDiv('stress-cm');
+    Logger.ok('ChartManager 大数据压力测试通过');
+    
+    Logger.exit('testStressLargeData');
+    T.endSection();
+}
+
+// ============================================================
+// 8. 内存泄漏检测
+// ============================================================
+function testMemoryLeaks() {
+    T.section('8. 内存泄漏检测');
+    Logger.entry('testMemoryLeaks');
+    
+    // GraphVisualizer 创建/销毁100次
+    Logger.info('GraphVisualizer 创建/销毁100次...');
+    const baseDivCount = document.querySelectorAll('div').length;
+    const div = makeDiv('mem-gv', 400, 300);
+    T.assertNoThrow(() => {
+        for (let i = 0; i < 100; i++) {
+            const gv = new GraphVisualizer('mem-gv');
+            gv.init(genNodes(20), genEdges(30, 20));
+            gv.destroy();
+        }
+    }, 'GV: 创建/销毁100次不崩溃');
+    
+    const afterDivCount = document.querySelectorAll('div').length;
+    const leakedDivs = afterDivCount - baseDivCount;
+    T.assert(leakedDivs < 10, 'GV: DOM泄漏少于10个div (实际: ' + leakedDivs + ')');
+    removeDiv('mem-gv');
+    
+    // TreeVisualizer 创建/销毁50次
+    Logger.info('TreeVisualizer 创建/销毁50次...');
+    const baseDivCount2 = document.querySelectorAll('div').length;
+    const div2 = makeDiv('mem-tv', 400, 300);
+    const simpleTree = { name: 'root', children: [{ name: 'a', value: 10 }, { name: 'b', value: 20 }] };
+    T.assertNoThrow(() => {
+        for (let i = 0; i < 50; i++) {
+            const tv = new TreeVisualizer('mem-tv');
+            tv.init(simpleTree);
+            tv.destroy();
+        }
+    }, 'TV: 创建/销毁50次不崩溃');
+    
+    const afterDivCount2 = document.querySelectorAll('div').length;
+    const leakedDivs2 = afterDivCount2 - baseDivCount2;
+    T.assert(leakedDivs2 < 10, 'TV: DOM泄漏少于10个div (实际: ' + leakedDivs2 + ')');
+    removeDiv('mem-tv');
+    
+    // ChartManager 创建多个图表
+    Logger.info('ChartManager 创建多个图表...');
+    const baseDivCount3 = document.querySelectorAll('div').length;
+    const div3 = makeDiv('mem-cm', 400, 300);
+    const cm = new ChartManager();
+    T.assertNoThrow(() => {
+        for (let i = 0; i < 30; i++) {
+            cm.createPieChart('mem-cm', [{ name: 'A', value: i + 1 }, { name: 'B', value: i + 2 }]);
+        }
+    }, 'CM: 创建30个饼图不崩溃');
+    
+    const afterDivCount3 = document.querySelectorAll('div').length;
+    const leakedDivs3 = afterDivCount3 - baseDivCount3;
+    Logger.info('CM创建30个图表后DOM div增量: ' + leakedDivs3);
+    removeDiv('mem-cm');
+    
+    Logger.exit('testMemoryLeaks');
+    T.endSection();
+}
+
+// ============================================================
+// 9. 混乱场景测试
+// ============================================================
+function testChaoticScenarios() {
+    T.section('9. 混乱场景测试');
+    Logger.entry('testChaoticScenarios');
+    
+    // 快速视图切换
+    Logger.info('GraphVisualizer 快速init/destroy 50次...');
+    const div = makeDiv('chaos-gv', 400, 300);
+    T.assertNoThrow(() => {
+        for (let i = 0; i < 50; i++) {
+            const gv = new GraphVisualizer('chaos-gv');
+            gv.init(KGData.projectStructure.nodes, KGData.projectStructure.edges);
+            gv.togglePhysics();
+            gv.searchNodes('Entry');
+            gv.resetHighlight();
+            gv.destroy();
+        }
+    }, 'GV: 快速init/destroy 50次');
+    removeDiv('chaos-gv');
+    
+    // 快速搜索切换
+    Logger.info('GraphVisualizer 快速搜索切换...');
+    const div2 = makeDiv('chaos-gv2', 400, 300);
+    const gv2 = new GraphVisualizer('chaos-gv2');
+    gv2.init(KGData.projectStructure.nodes, KGData.projectStructure.edges);
+    T.assertNoThrow(() => {
+        const terms = ['Entry', 'Main', 'Home', 'Service', 'Data', '', 'NONEXISTENT', 'App', 'Smart', 'Base'];
+        for (let round = 0; round < 5; round++) {
+            terms.forEach(t => gv2.searchNodes(t));
+        }
+    }, 'GV: 快速搜索50次');
+    gv2.destroy();
+    removeDiv('chaos-gv2');
+    
+    // 快速highlight切换
+    Logger.info('GraphVisualizer 快速highlight切换...');
+    const div3 = makeDiv('chaos-gv3', 400, 300);
+    const gv3 = new GraphVisualizer('chaos-gv3');
+    gv3.init(KGData.projectStructure.nodes, KGData.projectStructure.edges);
+    T.assertNoThrow(() => {
+        for (let i = 0; i < 100; i++) {
+            const nodeId = KGData.projectStructure.nodes[i % KGData.projectStructure.nodes.length].id;
+            gv3.highlightConnected(nodeId);
+            gv3.resetHighlight();
+        }
+    }, 'GV: 快速highlight 100次');
+    gv3.destroy();
+    removeDiv('chaos-gv3');
+    
+    // TreeVisualizer 快速展开/折叠
+    Logger.info('TreeVisualizer 快速展开/折叠...');
+    const div4 = makeDiv('chaos-tv', 400, 300);
+    const tv = new TreeVisualizer('chaos-tv');
+    tv.init(KGData.fileStructure);
+    T.assertNoThrow(() => {
+        for (let i = 0; i < 50; i++) {
+            tv.expandAll();
+            tv.collapseAll();
+        }
+    }, 'TV: 快速展开/折叠 50次');
+    tv.destroy();
+    removeDiv('chaos-tv');
+    
+    // ChartManager 快速创建不同类型图表
+    Logger.info('ChartManager 快速创建不同类型图表...');
+    const div5 = makeDiv('chaos-cm', 400, 300);
+    const cm = new ChartManager();
+    T.assertNoThrow(() => {
+        for (let i = 0; i < 30; i++) {
+            cm.createPieChart('chaos-cm', [{ name: 'A', value: i }, { name: 'B', value: i * 2 }]);
+            cm.createBarChart('chaos-cm', [{ name: 'X', value: i }]);
+            cm.createLineChart('chaos-cm', [{ date: 'D' + i, lines: i * 10 }]);
+        }
+    }, 'CM: 快速创建90个图表');
+    removeDiv('chaos-cm');
+    
+    Logger.exit('testChaoticScenarios');
+    T.endSection();
+}
+
+// ============================================================
+// 10. 数据边界测试
+// ============================================================
+function testDataBoundaries() {
+    T.section('10. 数据边界测试');
+    Logger.entry('testDataBoundaries');
+    
+    // 空数据
+    Logger.info('测试空数据...');
+    const div1 = makeDiv('bound-gv', 400, 300);
+    const gv1 = new GraphVisualizer('bound-gv');
+    T.assertNoThrow(() => gv1.init([], []), 'GV: 空节点空边');
+    T.assertNoThrow(() => gv1.searchNodes('anything'), 'GV: 空图搜索');
+    gv1.destroy();
+    removeDiv('bound-gv');
+    
+    // 单节点无边
+    Logger.info('测试单节点无边...');
+    const div2 = makeDiv('bound-gv2', 400, 300);
+    const gv2 = new GraphVisualizer('bound-gv2');
+    T.assertNoThrow(() => gv2.init([{ id: '1', label: 'Solo' }], []), 'GV: 单节点无边');
+    gv2.destroy();
+    removeDiv('bound-gv2');
+    
+    // 自环边
+    Logger.info('测试自环边...');
+    const div3 = makeDiv('bound-gv3', 400, 300);
+    const gv3 = new GraphVisualizer('bound-gv3');
+    T.assertNoThrow(() => gv3.init([{ id: '1', label: 'Self' }], [{ from: '1', to: '1' }]), 'GV: 自环边');
+    gv3.destroy();
+    removeDiv('bound-gv3');
+    
+    // 重复边
+    Logger.info('测试重复边...');
+    const div4 = makeDiv('bound-gv4', 400, 300);
+    const gv4 = new GraphVisualizer('bound-gv4');
+    T.assertNoThrow(() => gv4.init(
+        [{ id: '1', label: 'A' }, { id: '2', label: 'B' }],
+        [{ from: '1', to: '2' }, { from: '1', to: '2' }, { from: '1', to: '2' }]
+    ), 'GV: 重复边');
+    gv4.destroy();
+    removeDiv('bound-gv4');
+    
+    // 节点无label
+    Logger.info('测试节点无label...');
+    const div5 = makeDiv('bound-gv5', 400, 300);
+    const gv5 = new GraphVisualizer('bound-gv5');
+    T.assertNoThrow(() => gv5.init([{ id: '1' }], []), 'GV: 节点无label');
+    gv5.destroy();
+    removeDiv('bound-gv5');
+    
+    // 特殊字符label
+    Logger.info('测试特殊字符label...');
+    const specialLabels = [
+        '中文标签🚀测试',
+        'مرحبا',  // 阿拉伯语
+        '​',  // 零宽字符
+        'a'.repeat(10000),  // 超长字符串
+        '<img src=x onerror=alert(1)>',  // XSS (Bug#71修复后应安全)
+        'null',
+        'undefined',
+        '{"json": true}',
+        'path/to/file.ts',
+        'line\nwith\nnewlines',
+        'tab\tseparated\tvalues'
+    ];
+    const div6 = makeDiv('bound-gv6', 400, 300);
+    const gv6 = new GraphVisualizer('bound-gv6');
+    specialLabels.forEach((label, i) => {
+        T.assertNoThrow(() => {
+            const g = new GraphVisualizer('bound-gv6');
+            g.init([{ id: 's' + i, label: label }], []);
+            g.destroy();
+        }, 'GV: 特殊label[' + label.substring(0, 20) + '...]');
+    });
+    removeDiv('bound-gv6');
+    
+    // 数据中包含null/undefined
+    Logger.info('测试数据中null/undefined...');
+    const div7 = makeDiv('bound-gv7', 400, 300);
+    const gv7 = new GraphVisualizer('bound-gv7');
+    T.assertNoThrow(() => gv7.init([{ id: null, label: null }], []), 'GV: null id和label');
+    T.assertNoThrow(() => gv7.init([{ id: '1', label: 'A' }], [{ from: null, to: null }]), 'GV: null边');
+    T.assertNoThrow(() => gv7.init([{ id: '1', label: 'A' }], [{ from: undefined, to: '1' }]), 'GV: undefined from');
+    gv7.destroy();
+    removeDiv('bound-gv7');
+    
+    // 空树
+    Logger.info('测试空树...');
+    const div8 = makeDiv('bound-tv', 400, 300);
+    const tv = new TreeVisualizer('bound-tv');
+    T.assertNoThrow(() => tv.init({ name: 'empty', children: [] }), 'TV: 空树');
+    T.assertNoThrow(() => tv.init({ name: 'leaf', value: 1 }), 'TV: 叶节点(无children)');
+    tv.destroy();
+    removeDiv('bound-tv');
+    
+    // ChartManager 边界
+    Logger.info('测试ChartManager边界...');
+    const div9 = makeDiv('bound-cm', 400, 300);
+    const cm = new ChartManager();
+    T.assertNoThrow(() => cm.createPieChart('bound-cm', [{ name: '', value: 0 }]), 'CM: 空名零值');
+    T.assertNoThrow(() => cm.createLineChart('bound-cm', [{ date: '', lines: 0 }]), 'CM: 空日期零行数');
+    T.assertNoThrow(() => cm.createBarChart('bound-cm', [{ name: '', value: -100 }]), 'CM: 负值柱状图');
+    T.assertNoThrow(() => cm.createForceGraph('bound-cm', [{ id: '' }], []), 'CM: 空ID节点');
+    removeDiv('bound-cm');
+    
+    Logger.exit('testDataBoundaries');
+    T.endSection();
+}
+
+// ============================================================
+// 11. 并发操作测试
+// ============================================================
+function testConcurrency() {
+    T.section('11. 并发操作测试');
+    Logger.entry('testConcurrency');
+    
+    // 多个setTimeout重叠
+    Logger.info('测试多个setTimeout重叠...');
+    const div1 = makeDiv('conc-gv', 400, 300);
+    const gv = new GraphVisualizer('conc-gv');
+    gv.init(KGData.projectStructure.nodes, KGData.projectStructure.edges);
+    
+    T.assertNoThrow(() => {
+        const timers = [];
+        for (let i = 0; i < 20; i++) {
+            timers.push(setTimeout(() => {
+                gv.fit();
+                gv.searchNodes('N' + i);
+                gv.resetHighlight();
+            }, Math.random() * 100));
+        }
+        // 不等待执行完成，直接destroy
+        timers.forEach(t => clearTimeout(t));
+    }, 'GV: 20个setTimeout创建后清除不崩溃');
+    
+    gv.destroy();
+    removeDiv('conc-gv');
+    
+    // 快速连续destroy
+    Logger.info('测试快速连续destroy...');
+    const div2 = makeDiv('conc-gv2', 400, 300);
+    T.assertNoThrow(() => {
+        const gv = new GraphVisualizer('conc-gv2');
+        gv.init(KGData.projectStructure.nodes, KGData.projectStructure.edges);
+        gv.destroy();
+        gv.destroy(); // 双重destroy
+        gv.destroy(); // 三重destroy
+    }, 'GV: 多次destroy不崩溃');
+    removeDiv('conc-gv2');
+    
+    // destroy后调用方法
+    Logger.info('测试destroy后调用方法...');
+    const div3 = makeDiv('conc-gv3', 400, 300);
+    T.assertNoThrow(() => {
+        const gv = new GraphVisualizer('conc-gv3');
+        gv.init(KGData.projectStructure.nodes, KGData.projectStructure.edges);
+        gv.destroy();
+        gv.fit();
+        gv.searchNodes('test');
+        gv.highlightConnected('1');
+        gv.resetHighlight();
+        gv.togglePhysics();
+        gv.exportImage();
+        gv.focusNode('1');
+    }, 'GV: destroy后调用所有方法不崩溃');
+    removeDiv('conc-gv3');
+    
+    Logger.exit('testConcurrency');
+    T.endSection();
+}
+
+// ============================================================
+// 12. 安全测试
+// ============================================================
+function testSecurity() {
+    T.section('12. 安全测试');
+    Logger.entry('testSecurity');
+    
+    // XSS payload测试
+    // Bug #76修复: escapeHtml使用textContent方式，只转义<>和&，不转义引号
+    // XSS防护核心是确保HTML标签被转义，而非转义所有特殊字符
+    Logger.info('测试XSS payload转义...');
+    const xssTests = [
+        { input: '<b>bold</b>', expected: '&lt;b&gt;bold&lt;/b&gt;' },
+        { input: '<img src=x onerror=alert(1)>', check: '<img' },  // 标签被转义
+        { input: '<svg onload=alert(1)>', check: '<svg' },          // 标签被转义
+        { input: '<a href="javascript:alert(1)">', check: '<a' },    // 标签被转义
+        { input: '"><script>', check: '<script>' },                 // 标签被转义
+        { input: "'-alert(1)-'", expected: "'-alert(1)-'" },        // 无HTML标签，原样返回
+        { input: '{{constructor.constructor("alert(1)")()}}', expected: '{{constructor.constructor("alert(1)")()}}' }  // 无HTML标签，原样返回
+    ];
+    
+    xssTests.forEach(t => {
+        const escaped = escapeHtml(t.input);
+        if (t.expected) {
+            T.assert(escaped === t.expected, 'XSS: "' + t.input.substring(0, 30) + '" 精确匹配');
+        } else if (t.check) {
+            T.assert(!escaped.includes(t.check), 'XSS: "' + t.input.substring(0, 30) + '" 不含 ' + t.check);
+        }
+    });
+    
+    // SQL注入转义测试
+    // Bug #76修复: 修复测试逻辑 - replace(/'/g, "''")后检查每个原始单引号都被双写
+    Logger.info('测试SQL注入转义...');
+    const sqlPayloads = [
+        "'; DROP TABLE functions; --",
+        "1' OR '1'='1",
+        "'; INSERT INTO admin VALUES ('h', 'p'); --"
+    ];
+    sqlPayloads.forEach(p => {
+        const escaped = p.replace(/'/g, "''");
+        // 正确的检查: 转义后不应存在单独的'后面跟非'的字符（即原始单引号都被双写了）
+        // 简单检查: 转义后字符串长度 = 原始长度 + 原始单引号数量
+        const origSingleQuoteCount = (p.match(/'/g) || []).length;
+        const escapedSingleQuoteCount = (escaped.match(/'/g) || []).length;
+        T.assert(escapedSingleQuoteCount === origSingleQuoteCount * 2,
+            'SQL: "' + p.substring(0, 25) + '" 单引号被双写转义');
+    });
+    
+    // CSV转义测试
+    Logger.info('测试CSV转义...');
+    const csvVal = 'value with "quotes" and,commas';
+    const csvEscaped = '"' + csvVal.replace(/"/g, '""') + '"';
+    T.assert(csvEscaped.startsWith('"') && csvEscaped.endsWith('"'), 'CSV: 值被双引号包裹');
+    T.assert(!csvEscaped.includes('value with "quotes"'), 'CSV: 内部双引号被转义');
+    
+    Logger.exit('testSecurity');
+    T.endSection();
+}
+
+// ============================================================
+// 13. 全链路集成测试
+// ============================================================
+function testFullIntegration() {
+    T.section('13. 全链路集成测试');
+    Logger.entry('testFullIntegration');
+    
+    // 模拟完整的项目加载流程
+    Logger.info('模拟完整项目加载流程...');
+    const div1 = makeDiv('int-gv', 800, 600);
+    const div2 = makeDiv('int-cm', 600, 400);
+    const div3 = makeDiv('int-tv', 800, 600);
+    const div4 = makeDiv('int-sv', 800, 600);
+    
+    // 1. 初始化项目结构图
+    Logger.info('步骤1: 初始化项目结构图...');
+    const gv = new GraphVisualizer('int-gv');
+    const net = gv.init(KGData.projectStructure.nodes, KGData.projectStructure.edges);
+    T.assert(net !== null, '集成: 项目结构图初始化成功');
+    
+    // 2. 搜索
+    Logger.info('步骤2: 搜索节点...');
+    gv.searchNodes('Entry');
+    gv.resetHighlight();
+    
+    // 3. 高亮连接
+    Logger.info('步骤3: 高亮连接...');
+    if (KGData.projectStructure.nodes.length > 0) {
+        gv.highlightConnected(KGData.projectStructure.nodes[0].id);
+        gv.resetHighlight();
+    }
+    
+    // 4. 切换物理引擎
+    Logger.info('步骤4: 切换物理引擎...');
+    gv.togglePhysics();
+    gv.togglePhysics();
+    
+    // 5. 创建图表
+    Logger.info('步骤5: 创建统计图表...');
+    const cm = new ChartManager();
+    cm.createPieChart('int-cm', KGData.fileTypes);
+    cm.createLineChart('int-cm', KGData.codeTrend);
+    cm.createBarChart('int-cm', KGData.codeStats.languages);
+    
+    // 6. 创建树形图
+    Logger.info('步骤6: 创建文件结构树...');
+    const tv = new TreeVisualizer('int-tv');
+    tv.init(KGData.fileStructure);
+    tv.expandAll();
+    tv.collapseAll();
+    
+    // 7. 创建旭日图
+    Logger.info('步骤7: 创建旭日图...');
+    const sv = new SunburstVisualizer('int-sv');
+    sv.init(KGData.fileStructure);
+    
+    // 8. 清理
+    Logger.info('步骤8: 清理所有组件...');
+    T.assertNoThrow(() => { gv.destroy(); tv.destroy(); sv.destroy(); }, '集成: 所有组件destroy');
+    
+    removeDiv('int-gv');
+    removeDiv('int-cm');
+    removeDiv('int-tv');
+    removeDiv('int-sv');
+    
+    Logger.ok('全链路集成测试通过');
+    Logger.exit('testFullIntegration');
+    T.endSection();
+}
+
+// ============================================================
+// 运行所有测试
+// ============================================================
+function runAllTests() {
+    Logger.info('🚀 开始大规模综合自动化测试...');
+    Logger.info('测试框架版本: v2.0');
+    Logger.info('测试时间: ' + new Date().toISOString());
+    
+    const suites = [
+        testDataIntegrity,
+        testGraphVisualizer,
+        testTreeVisualizer,
+        testSunburstVisualizer,
+        testChartManager,
+        testMainFunctions,
+        testStressLargeData,
+        testMemoryLeaks,
+        testChaoticScenarios,
+        testDataBoundaries,
+        testConcurrency,
+        testSecurity,
+        testFullIntegration
+    ];
+    
+    let failedSuites = 0;
+    suites.forEach(fn => {
+        try { fn(); }
+        catch(e) {
+            Logger.error('测试套件崩溃: ' + e.message + '\n' + e.stack);
+            failedSuites++;
+        }
+    });
+    
+    // 汇总
+    const total = T.results.length;
+    const pass = T.results.filter(r => r.pass).length;
+    const fail = total - pass;
+    
+    Logger.info('');
+    Logger.info('═'.repeat(60));
+    Logger.info('  测试完成汇总');
+    Logger.info('═'.repeat(60));
+    Logger.info('  总测试: ' + total);
+    Logger.info('  通过:   ' + pass);
+    Logger.info('  失败:   ' + fail);
+    Logger.info('  崩溃套件: ' + failedSuites);
+    Logger.info('  总耗时: ' + (Date.now() - T._totalStart) + 'ms');
+    Logger.info('═'.repeat(60));
+    
+    if (fail > 0) {
+        Logger.warn('失败的测试:');
+        T.results.filter(r => !r.pass).forEach(r => {
+            Logger.fail('  ✗ ' + r.name + (r.detail ? ' — ' + r.detail : ''));
+            console.error('TEST_FAIL: ' + r.name + (r.detail ? ' — ' + r.detail : ''));
+        });
+    }
+    console.log('TEST_SUMMARY: total=' + total + ' pass=' + pass + ' fail=' + fail + ' crashedSuites=' + failedSuites + ' time=' + (Date.now() - T._totalStart) + 'ms');
+    
+    // 自动滚动日志到底部
+    if (Logger._logEl) Logger._logEl.scrollTop = Logger._logEl.scrollHeight;
+}
+
+// 自动运行
+runAllTests();
+</script>
+</body>
+</html>

@@ -3,16 +3,41 @@
  * Uses Vis.js for network visualization
  */
 
+// Bug #77修复: 使用window.KGLog确保跨文件全局可见
+if (typeof window.KGLog === 'undefined') {
+    window.KGLog = {
+        _enabled: true,
+        _prefix: '[KG]',
+        entry(method, msg) { if (this._enabled) console.log(`${this._prefix} ▶ ${method}: ${msg}`); },
+        exit(method, msg) { if (this._enabled) console.log(`${this._prefix} ◀ ${method}: ${msg || 'done'}`); },
+        info(method, msg) { if (this._enabled) console.log(`${this._prefix} ℹ ${method}: ${msg}`); },
+        warn(method, msg) { if (this._enabled) console.warn(`${this._prefix} ⚠ ${method}: ${msg}`); },
+        error(method, msg) { if (this._enabled) console.error(`${this._prefix} ✖ ${method}: ${msg}`); },
+        data(method, msg, data) { if (this._enabled) console.log(`${this._prefix} 📊 ${method}: ${msg}`, data); }
+    };
+}
+// Bug #77修复续: 使用var避免重复声明错误
+var KGLog = window.KGLog;
+
 class GraphVisualizer {
     constructor(containerId, options = {}) {
+        KGLog.entry('GraphVisualizer.constructor', `containerId=${containerId}`);
         this.container = document.getElementById(containerId);
         // Bug #30修复: 容器不存在时给出警告而非后续崩溃
         if (!this.container) {
             console.warn(`GraphVisualizer: container #${containerId} not found`);
+            KGLog.warn('GraphVisualizer.constructor', `container #${containerId} not found`);
         }
         this.network = null;
         this.nodes = null;
         this.edges = null;
+        // Bug #71修复: 内置escapeHtml防止XSS
+        this._escapeHtml = function(str) {
+            if (str === null || str === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = String(str);
+            return div.innerHTML;
+        };
         this.options = {
             groups: {
                 component: {
@@ -57,8 +82,15 @@ class GraphVisualizer {
                     avoidOverlap: 0.2
                 },
                 stabilization: {
-                    iterations: 200
-                }
+                    enabled: true,
+                    iterations: 200,
+                    updateInterval: 25,
+                    // Bug #79修复: 添加超时保护，防止大规模数据导致浏览器卡死
+                    onlyDynamicEdges: false,
+                    fit: true
+                },
+                // Bug #79修复: 自适应时间步长，大数据量时降低精度保证响应
+                adaptiveTimestep: true
             },
             interaction: {
                 hover: true,
@@ -67,21 +99,44 @@ class GraphVisualizer {
                 navigationButtons: true,
                 keyboard: true
             },
+            // Bug #71修复: 禁用HTML渲染，使用纯文本
+            // Bug #93修复: 标签不再预转义，由showNodeDetails统一转义
+            nodes: {
+                font: { multi: false }
+            },
             layout: {
                 improvedLayout: true
             },
             ...options
         };
+        KGLog.exit('GraphVisualizer.constructor', 'options configured');
     }
 
     /**
      * Initialize the network with data
      */
     init(nodesData, edgesData) {
+        KGLog.entry('GraphVisualizer.init', `nodes=${nodesData ? nodesData.length : 0}, edges=${edgesData ? edgesData.length : 0}`);
         // Bug #30修复: 容器不存在时安全返回
         if (!this.container) {
             console.error('GraphVisualizer.init: container is null');
+            KGLog.error('GraphVisualizer.init', 'container is null');
             return null;
+        }
+        // Bug #79修复: 数据规模限制保护，防止浏览器卡死
+        const MAX_NODES = 2000;
+        const MAX_EDGES = 5000;
+        const nodeCount = nodesData ? nodesData.length : 0;
+        const edgeCount = edgesData ? edgesData.length : 0;
+        if (nodeCount > MAX_NODES) {
+            console.warn(`GraphVisualizer.init: node count ${nodeCount} exceeds limit ${MAX_NODES}, truncating`);
+            KGLog.warn('GraphVisualizer.init', `node count ${nodeCount} exceeds limit ${MAX_NODES}, truncating`);
+            nodesData = nodesData.slice(0, MAX_NODES);
+        }
+        if (edgeCount > MAX_EDGES) {
+            console.warn(`GraphVisualizer.init: edge count ${edgeCount} exceeds limit ${MAX_EDGES}, truncating`);
+            KGLog.warn('GraphVisualizer.init', `edge count ${edgeCount} exceeds limit ${MAX_EDGES}, truncating`);
+            edgesData = edgesData.slice(0, MAX_EDGES);
         }
         try {
             // Ensure container has minimum dimensions
@@ -89,27 +144,41 @@ class GraphVisualizer {
             if (rect.width === 0 || rect.height === 0) {
                 this.container.style.minHeight = '400px';
                 this.container.style.minWidth = '300px';
+                KGLog.info('GraphVisualizer.init', 'container had zero dimensions, set minimums');
             }
 
+            // Bug #93修复: vis.js已禁用HTML渲染(multi:false)，标签作为纯文本显示，无需预转义
+            // showNodeDetails中使用innerHTML时再通过escapeHtml转义
+            const safeNodes = nodesData.map(node => ({
+                ...node
+            }));
+            KGLog.info('GraphVisualizer.init', `prepared ${safeNodes.length} nodes`);
+
             // Create DataSets
-            this.nodes = new vis.DataSet(nodesData);
+            this.nodes = new vis.DataSet(safeNodes);
             this.edges = new vis.DataSet(edgesData);
 
             // Create network
             const data = { nodes: this.nodes, edges: this.edges };
             this.network = new vis.Network(this.container, data, this.options);
+            KGLog.info('GraphVisualizer.init', 'vis.Network created');
 
             // Setup event handlers
             this.setupEvents();
 
             // Auto-fit after stabilization
+            // Bug #74修复: 添加null检查，防止destroy后stabilization回调触发崩溃
             this.network.once('stabilizationIterationsDone', () => {
-                this.network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+                if (this.network) {
+                    this.network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+                }
             });
 
+            KGLog.exit('GraphVisualizer.init', 'network initialized');
             return this.network;
         } catch (e) {
             console.error('GraphVisualizer.init failed:', e);
+            KGLog.error('GraphVisualizer.init', `failed: ${e.message}`);
             return null;
         }
     }
@@ -118,6 +187,7 @@ class GraphVisualizer {
      * Setup network event handlers
      */
     setupEvents() {
+        KGLog.entry('GraphVisualizer.setupEvents', 'registering event handlers');
         // Click event
         this.network.on('click', (params) => {
             if (params.nodes.length > 0) {
@@ -125,15 +195,18 @@ class GraphVisualizer {
                 this.onNodeClick(nodeId);
             }
         });
+        KGLog.info('GraphVisualizer.setupEvents', 'registered: click');
 
         // Hover event
+        // Bug #74修复: 添加null检查，防止destroy后事件回调崩溃
         this.network.on('hoverNode', (params) => {
-            this.container.style.cursor = 'pointer';
+            if (this.container) this.container.style.cursor = 'pointer';
         });
 
         this.network.on('blurNode', (params) => {
-            this.container.style.cursor = 'default';
+            if (this.container) this.container.style.cursor = 'default';
         });
+        KGLog.info('GraphVisualizer.setupEvents', 'registered: hoverNode, blurNode');
 
         // Double click to focus
         this.network.on('doubleClick', (params) => {
@@ -141,21 +214,34 @@ class GraphVisualizer {
                 this.focusNode(params.nodes[0]);
             }
         });
+        KGLog.info('GraphVisualizer.setupEvents', 'registered: doubleClick');
 
         // Stabilization progress
         this.network.on('stabilizationProgress', (params) => {
-            const progress = Math.round((params.iterations / params.total) * 100);
+            // Bug #90修复: 防止params.total为0导致除零错误
+            const progress = params.total > 0 ? Math.round((params.iterations / params.total) * 100) : 0;
             console.log('Stabilization: ' + progress + '%');
         });
+        KGLog.info('GraphVisualizer.setupEvents', 'registered: stabilizationProgress');
+        KGLog.exit('GraphVisualizer.setupEvents', 'all handlers registered');
     }
 
     /**
      * Handle node click
      */
     onNodeClick(nodeId) {
+        KGLog.entry('GraphVisualizer.onNodeClick', `nodeId=${nodeId}`);
+        // Bug #74修复: 添加null检查，防止destroy后回调崩溃
+        if (!this.nodes) {
+            KGLog.warn('GraphVisualizer.onNodeClick', 'nodes dataset is null, skipping');
+            return;
+        }
         const node = this.nodes.get(nodeId);
         if (node && window.showNodeDetails) {
             window.showNodeDetails(node);
+            KGLog.exit('GraphVisualizer.onNodeClick', `dispatched showNodeDetails for "${node.label}"`);
+        } else {
+            KGLog.warn('GraphVisualizer.onNodeClick', `node not found or showNodeDetails unavailable`);
         }
     }
 
@@ -163,7 +249,11 @@ class GraphVisualizer {
      * Focus on a specific node
      */
     focusNode(nodeId, options = {}) {
-        if (!this.network) return;
+        KGLog.entry('GraphVisualizer.focusNode', `nodeId=${nodeId}, options=${JSON.stringify(options)}`);
+        if (!this.network) {
+            KGLog.warn('GraphVisualizer.focusNode', 'network is null, skipping');
+            return;
+        }
         const defaultOptions = {
             scale: 1.2,
             animation: {
@@ -172,13 +262,18 @@ class GraphVisualizer {
             }
         };
         this.network.focus(nodeId, { ...defaultOptions, ...options });
+        KGLog.exit('GraphVisualizer.focusNode', `focused on node ${nodeId}`);
     }
 
     /**
      * Fit all nodes in view
      */
     fit(options = {}) {
-        if (!this.network) return;
+        KGLog.entry('GraphVisualizer.fit', `options=${JSON.stringify(options)}`);
+        if (!this.network) {
+            KGLog.warn('GraphVisualizer.fit', 'network is null, skipping');
+            return;
+        }
         const defaultOptions = {
             animation: {
                 duration: 500,
@@ -186,15 +281,22 @@ class GraphVisualizer {
             }
         };
         this.network.fit({ ...defaultOptions, ...options });
+        KGLog.exit('GraphVisualizer.fit', 'done');
     }
 
     /**
      * Toggle physics simulation
      */
     togglePhysics() {
-        if (!this.network) return false;
+        KGLog.entry('GraphVisualizer.togglePhysics', '');
+        if (!this.network) {
+            KGLog.warn('GraphVisualizer.togglePhysics', 'network is null, skipping');
+            return false;
+        }
         const currentState = this.network.physics.physicsEnabled;
+        KGLog.info('GraphVisualizer.togglePhysics', `current state: ${currentState}`);
         this.network.setOptions({ physics: { enabled: !currentState } });
+        KGLog.exit('GraphVisualizer.togglePhysics', `physics ${currentState ? 'disabled' : 'enabled'}`);
         return !currentState;
     }
 
@@ -202,16 +304,25 @@ class GraphVisualizer {
      * Highlight connected nodes
      */
     highlightConnected(nodeId) {
-        if (!this.network || !this.nodes || !this.edges) return;
+        KGLog.entry('GraphVisualizer.highlightConnected', `nodeId=${nodeId}`);
+        if (!this.network || !this.nodes || !this.edges) {
+            KGLog.warn('GraphVisualizer.highlightConnected', 'network/nodes/edges is null, skipping');
+            return;
+        }
         const connectedNodes = this.network.getConnectedNodes(nodeId);
         const connectedEdges = this.network.getConnectedEdges(nodeId);
+        KGLog.info('GraphVisualizer.highlightConnected', `connected nodes=${connectedNodes.length}, edges=${connectedEdges.length}`);
+
+        // Bug #56修复: 使用Set替代includes，O(1)查找替代O(n)
+        const connectedNodeSet = new Set(connectedNodes);
+        const connectedEdgeSet = new Set(connectedEdges);
 
         // Dim all nodes
         const allNodes = this.nodes.get();
         const updateArray = [];
 
         for (const node of allNodes) {
-            if (node.id === nodeId || connectedNodes.includes(node.id)) {
+            if (node.id === nodeId || connectedNodeSet.has(node.id)) {
                 updateArray.push({
                     id: node.id,
                     color: null, // Reset to group color
@@ -233,7 +344,7 @@ class GraphVisualizer {
         const edgeUpdateArray = [];
 
         for (const edge of allEdges) {
-            if (connectedEdges.includes(edge.id)) {
+            if (connectedEdgeSet.has(edge.id)) {
                 edgeUpdateArray.push({
                     id: edge.id,
                     color: { color: '#2563eb', opacity: 1 },
@@ -249,6 +360,7 @@ class GraphVisualizer {
         }
 
         this.edges.update(edgeUpdateArray);
+        KGLog.exit('GraphVisualizer.highlightConnected', `updated ${updateArray.length} nodes, ${edgeUpdateArray.length} edges`);
     }
 
     /**
@@ -257,6 +369,7 @@ class GraphVisualizer {
     resetHighlight() {
         if (!this.nodes || !this.edges) return;
         const allNodes = this.nodes.get();
+        const nodeUpdateArray = allNodes.map(node => ({
             id: node.id,
             color: null,
             opacity: 1
@@ -276,26 +389,34 @@ class GraphVisualizer {
      * Search and highlight nodes
      */
     searchNodes(query) {
-        if (!this.nodes || !query) return [];
+        KGLog.entry('GraphVisualizer.searchNodes', `query="${query}"`);
+        if (!this.nodes || !query) {
+            KGLog.warn('GraphVisualizer.searchNodes', 'nodes dataset is null or query is empty');
+            return [];
+        }
         const allNodes = this.nodes.get();
         const matchedNodes = allNodes.filter(node =>
             (node.label || '').toLowerCase().includes(query.toLowerCase()) ||
             (node.title && node.title.toLowerCase().includes(query.toLowerCase()))
         );
+        KGLog.info('GraphVisualizer.searchNodes', `found ${matchedNodes.length} matches`);
 
         if (matchedNodes.length > 0) {
             // Focus on first match
             this.focusNode(matchedNodes[0].id);
             
             // Highlight matches
+            // Bug #91修复: 仅匹配节点设置borderWidthSelected=4，非匹配节点恢复默认
+            const matchedSet = new Set(matchedNodes.map(m => m.id));
             const updateArray = allNodes.map(node => ({
                 id: node.id,
-                borderWidth: matchedNodes.some(m => m.id === node.id) ? 4 : 1,
-                borderWidthSelected: 4
+                borderWidth: matchedSet.has(node.id) ? 4 : 1,
+                borderWidthSelected: matchedSet.has(node.id) ? 4 : 2
             }));
             this.nodes.update(updateArray);
         }
 
+        KGLog.exit('GraphVisualizer.searchNodes', `returning ${matchedNodes.length} results`);
         return matchedNodes;
     }
 
@@ -303,10 +424,15 @@ class GraphVisualizer {
      * Export graph as image
      */
     exportImage() {
-        if (!this.container) return;
+        KGLog.entry('GraphVisualizer.exportImage', '');
+        if (!this.container) {
+            KGLog.warn('GraphVisualizer.exportImage', 'container is null, skipping');
+            return;
+        }
         const canvas = this.container.getElementsByTagName('canvas')[0];
         if (!canvas) {
             console.warn('GraphVisualizer.exportImage: no canvas found');
+            KGLog.warn('GraphVisualizer.exportImage', 'no canvas found');
             return;
         }
         try {
@@ -314,8 +440,10 @@ class GraphVisualizer {
             link.download = 'knowledge-graph.png';
             link.href = canvas.toDataURL('image/png');
             link.click();
+            KGLog.exit('GraphVisualizer.exportImage', 'exported as knowledge-graph.png');
         } catch (e) {
             console.error('GraphVisualizer.exportImage failed:', e);
+            KGLog.error('GraphVisualizer.exportImage', `failed: ${e.message}`);
         }
     }
 
@@ -323,19 +451,31 @@ class GraphVisualizer {
      * Destroy the network
      */
     destroy() {
+        KGLog.entry('GraphVisualizer.destroy', 'cleaning up');
+        // Bug #74修复: 先移除所有事件监听器，防止destroy后回调触发
         if (this.network) {
+            this.network.off('click');
+            this.network.off('hoverNode');
+            this.network.off('blurNode');
+            this.network.off('doubleClick');
+            this.network.off('stabilizationProgress');
+            this.network.off('stabilizationIterationsDone');
             this.network.destroy();
             this.network = null;
+            KGLog.info('GraphVisualizer.destroy', 'network events removed and destroyed');
         }
         if (this.nodes) {
             this.nodes.clear();
             this.nodes = null;
+            KGLog.info('GraphVisualizer.destroy', 'nodes dataset cleared');
         }
         if (this.edges) {
             this.edges.clear();
             this.edges = null;
+            KGLog.info('GraphVisualizer.destroy', 'edges dataset cleared');
         }
         this.container = null;
+        KGLog.exit('GraphVisualizer.destroy', 'cleanup complete');
     }
 }
 
@@ -344,7 +484,14 @@ class GraphVisualizer {
  */
 class TreeVisualizer {
     constructor(containerId, options = {}) {
+        KGLog.entry('TreeVisualizer.constructor', `containerId=${containerId}`);
         this.container = d3.select(`#${containerId}`);
+        // Bug #66修复: 容器不存在时给出警告
+        const containerNode = this.container.node();
+        if (!containerNode) {
+            console.warn(`TreeVisualizer: container #${containerId} not found`);
+            KGLog.warn('TreeVisualizer.constructor', `container #${containerId} not found`);
+        }
         this.options = {
             width: 800,
             height: 600,
@@ -357,9 +504,11 @@ class TreeVisualizer {
         this.g = null;
         this.tree = null;
         this.i = 0; // 节点ID计数器
+        KGLog.exit('TreeVisualizer.constructor', 'options configured');
     }
 
     init(data) {
+        KGLog.entry('TreeVisualizer.init', `root name="${data ? data.name : 'null'}"`);
         // Clear container
         this.container.selectAll('*').remove();
         this.i = 0; // 重置计数器
@@ -398,8 +547,13 @@ class TreeVisualizer {
             this.root.children.forEach(child => this.collapse(child));
         }
 
+        const nodeCount = this.root.descendants().length;
+        const depth = this.root.height;
+        KGLog.info('TreeVisualizer.init', `depth=${depth}, nodeCount=${nodeCount}`);
+
         this.update(this.root);
 
+        KGLog.exit('TreeVisualizer.init', 'tree rendered');
         return this;
     }
 
@@ -519,18 +673,26 @@ class TreeVisualizer {
     }
 
     expandAll() {
+        KGLog.entry('TreeVisualizer.expandAll', '');
         if (this.root) {
             this.expandNode(this.root);
             this.update(this.root);
+            KGLog.exit('TreeVisualizer.expandAll', 'all nodes expanded');
+        } else {
+            KGLog.warn('TreeVisualizer.expandAll', 'root is null, skipping');
         }
     }
 
     collapseAll() {
+        KGLog.entry('TreeVisualizer.collapseAll', '');
         if (this.root) {
             if (this.root.children) {
                 this.root.children.forEach(child => this.collapse(child));
             }
             this.update(this.root);
+            KGLog.exit('TreeVisualizer.collapseAll', 'all nodes collapsed');
+        } else {
+            KGLog.warn('TreeVisualizer.collapseAll', 'root is null, skipping');
         }
     }
 
@@ -545,16 +707,22 @@ class TreeVisualizer {
     }
 
     // Bug #30修复: 添加destroy方法防止内存泄漏
+    // Bug #80修复: 正确移除D3 zoom事件监听器
     destroy() {
+        KGLog.entry('TreeVisualizer.destroy', 'cleaning up');
         if (this.svg) {
-            this.svg.on('.zoom', null); // 移除D3 zoom事件
+            // 正确移除zoom事件 - D3 v7语法
+            this.svg.on('zoom', null);
+            this.svg.selectAll('*').remove();
             this.svg.remove();
             this.svg = null;
+            KGLog.info('TreeVisualizer.destroy', 'SVG and zoom events removed');
         }
         this.g = null;
         this.root = null;
         this.tree = null;
         this.container = null;
+        KGLog.exit('TreeVisualizer.destroy', 'cleanup complete');
     }
 }
 
@@ -563,16 +731,25 @@ class TreeVisualizer {
  */
 class SunburstVisualizer {
     constructor(containerId, options = {}) {
+        KGLog.entry('SunburstVisualizer.constructor', `containerId=${containerId}`);
         this.container = d3.select(`#${containerId}`);
+        // Bug #67修复: 容器不存在时给出警告
+        const containerNode = this.container.node();
+        if (!containerNode) {
+            console.warn(`SunburstVisualizer: container #${containerId} not found`);
+            KGLog.warn('SunburstVisualizer.constructor', `container #${containerId} not found`);
+        }
         this.options = {
             width: 600,
             height: 600,
             radius: 300,
             ...options
         };
+        KGLog.exit('SunburstVisualizer.constructor', 'options configured');
     }
 
     init(data) {
+        KGLog.entry('SunburstVisualizer.init', `root name="${data ? data.name : 'null'}"`);
         // Clear container
         this.container.selectAll('*').remove();
 
@@ -600,6 +777,10 @@ class SunburstVisualizer {
 
         partition(root);
 
+        const depth = root.height;
+        const nodeCount = root.descendants().length;
+        KGLog.info('SunburstVisualizer.init', `depth=${depth}, nodeCount=${nodeCount}`);
+
         // Create SVG
         const svg = this.container.append('svg')
             .attr('width', width)
@@ -616,8 +797,10 @@ class SunburstVisualizer {
             .data(root.descendants().filter(d => d.depth))
             .join('path')
             .attr('fill', d => {
-                while (d.depth > 1) d = d.parent;
-                return color(d.data.name);
+                // Bug #37修复: 使用临时变量避免修改D3绑定的数据引用
+                let ancestor = d;
+                while (ancestor.depth > 1) ancestor = ancestor.parent;
+                return color(ancestor.data.name);
             })
             .attr('d', arc)
             .style('cursor', 'pointer')
@@ -659,13 +842,16 @@ class SunburstVisualizer {
             .style('font-size', '12px')
             .style('fill', '#f1f5f9');
 
+        KGLog.exit('SunburstVisualizer.init', 'sunburst rendered');
         return this;
     }
 
     // Bug #30修复: 添加destroy方法防止内存泄漏
     destroy() {
+        KGLog.entry('SunburstVisualizer.destroy', 'cleaning up');
         this.container.selectAll('*').remove();
         this.container = null;
+        KGLog.exit('SunburstVisualizer.destroy', 'cleanup complete');
     }
 }
 

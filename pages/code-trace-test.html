@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代码执行追踪测试 - ArkTS知识图谱</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .trace-panel {
+            margin: 20px;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+        }
+        .trace-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .trace-btn {
+            padding: 10px 20px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .trace-btn:hover {
+            background: var(--primary-dark);
+        }
+        .trace-btn.danger {
+            background: var(--danger-color);
+        }
+        .trace-log-container {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 600px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+        .trace-entry {
+            margin: 2px 0;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .trace-entry.entry { background: rgba(59, 130, 246, 0.2); }
+        .trace-entry.exit { background: rgba(16, 185, 129, 0.2); }
+        .trace-entry.var { background: rgba(245, 158, 11, 0.2); }
+        .trace-entry.call { background: rgba(139, 92, 246, 0.2); }
+        .trace-entry.return { background: rgba(236, 72, 153, 0.2); }
+        .trace-entry.loop { background: rgba(6, 182, 212, 0.2); }
+        .trace-entry.branch { background: rgba(249, 115, 22, 0.2); }
+        .trace-entry.error { background: rgba(239, 68, 68, 0.3); color: #fca5a5; }
+        .trace-entry.warn { background: rgba(245, 158, 11, 0.3); color: #fcd34d; }
+        .trace-entry.info { color: var(--text-muted); }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background: var(--bg-tertiary);
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        .filter-controls {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .filter-btn {
+            padding: 4px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .filter-btn.active {
+            background: var(--primary-color);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <nav class="sidebar" aria-label="主导航">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-project-diagram"></i>
+                    <span>ArkTS知识图谱</span>
+                </div>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="../index.html" class="nav-link">
+                        <i class="fas fa-home"></i>
+                        <span>项目概览</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="file-structure.html" class="nav-link">
+                        <i class="fas fa-folder-tree"></i>
+                        <span>文件结构</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="class-hierarchy.html" class="nav-link">
+                        <i class="fas fa-sitemap"></i>
+                        <span>类继承关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="function-calls.html" class="nav-link">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>函数调用</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="module-deps.html" class="nav-link">
+                        <i class="fas fa-cubes"></i>
+                        <span>模块依赖</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="statistics.html" class="nav-link">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>代码统计</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="query.html" class="nav-link">
+                        <i class="fas fa-search"></i>
+                        <span>自然语言查询</span>
+                    </a>
+                </li>
+                <li class="nav-item active">
+                    <a href="code-trace-test.html" class="nav-link">
+                        <i class="fas fa-microscope"></i>
+                        <span>代码追踪测试</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <h1 class="page-title">
+                    <i class="fas fa-microscope"></i>
+                    代码执行追踪测试
+                </h1>
+            </header>
+
+            <!-- 统计面板 -->
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value" id="totalLogs">0</div>
+                    <div class="stat-label">总日志数</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="functionCalls">0</div>
+                    <div class="stat-label">函数调用</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="errors">0</div>
+                    <div class="stat-label">错误数</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="warnings">0</div>
+                    <div class="stat-label">警告数</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="stackDepth">0</div>
+                    <div class="stat-label">当前栈深</div>
+                </div>
+            </div>
+
+            <!-- 测试控制 -->
+            <div class="trace-panel">
+                <h3><i class="fas fa-vial"></i> 逐行代码执行测试</h3>
+                <div class="trace-controls">
+                    <button class="trace-btn" onclick="runDataModuleTest()">测试Data模块</button>
+                    <button class="trace-btn" onclick="runSearchTest()">测试Search功能</button>
+                    <button class="trace-btn" onclick="runEdgeCaseTest()">测试边界条件</button>
+                    <button class="trace-btn danger" onclick="runChaosTest()">混沌测试</button>
+                    <button class="trace-btn" onclick="clearLogs()">清空日志</button>
+                    <button class="trace-btn" onclick="exportLogs()">导出日志</button>
+                </div>
+            </div>
+
+            <!-- 日志过滤器 -->
+            <div class="trace-panel">
+                <h3><i class="fas fa-filter"></i> 日志过滤器</h3>
+                <div class="filter-controls">
+                    <button class="filter-btn active" onclick="toggleFilter('all')">全部</button>
+                    <button class="filter-btn" onclick="toggleFilter('entry')">函数进入</button>
+                    <button class="filter-btn" onclick="toggleFilter('exit')">函数退出</button>
+                    <button class="filter-btn" onclick="toggleFilter('var')">变量赋值</button>
+                    <button class="filter-btn" onclick="toggleFilter('call')">函数调用</button>
+                    <button class="filter-btn" onclick="toggleFilter('branch')">条件分支</button>
+                    <button class="filter-btn" onclick="toggleFilter('loop')">循环</button>
+                    <button class="filter-btn" onclick="toggleFilter('error')">错误</button>
+                </div>
+            </div>
+
+            <!-- 日志显示 -->
+            <div class="trace-panel">
+                <h3><i class="fas fa-terminal"></i> 执行日志</h3>
+                <div class="trace-log-container" id="traceLog">
+                    <div class="trace-entry info">等待测试开始...</div>
+                </div>
+            </div>
+
+            <!-- 问题分析 -->
+            <div class="trace-panel">
+                <h3><i class="fas fa-bug"></i> 潜在问题分析</h3>
+                <div id="issueAnalysis">
+                    <p class="text-muted">运行测试后显示分析结果</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../js/code-tracer.js"></script>
+    <script src="../js/data-traced.js"></script>
+    <script>
+        // 当前过滤器
+        let currentFilter = 'all';
+
+        // 更新统计显示
+        function updateStats() {
+            const stats = CodeTracer.getStats();
+            document.getElementById('totalLogs').textContent = stats.totalLogs;
+            document.getElementById('functionCalls').textContent = 
+                Object.values(stats.functionCalls).reduce((a, b) => a + b, 0);
+            document.getElementById('errors').textContent = stats.errors;
+            document.getElementById('warnings').textContent = stats.warnings;
+            document.getElementById('stackDepth').textContent = stats.currentStack.length;
+        }
+
+        // 渲染日志
+        function renderLogs() {
+            const container = document.getElementById('traceLog');
+            const logs = currentFilter === 'all' 
+                ? CodeTracer.logs 
+                : CodeTracer.logs.filter(l => l.type === currentFilter);
+            
+            if (logs.length === 0) {
+                container.innerHTML = '<div class="trace-entry info">暂无日志</div>';
+                return;
+            }
+
+            container.innerHTML = logs.map(log => {
+                const time = log.timestamp ? `[${log.timestamp.toFixed(2)}ms]` : '';
+                const location = `[${log.file}:${log.line}]`;
+                const data = log.data ? ` | ${log.data}` : '';
+                return `<div class="trace-entry ${log.type}">${time} ${location} ${log.message}${data}</div>`;
+            }).join('');
+
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // 切换过滤器
+        function toggleFilter(type) {
+            currentFilter = type;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            renderLogs();
+        }
+
+        // 清空日志
+        function clearLogs() {
+            CodeTracer.clear();
+            renderLogs();
+            updateStats();
+            document.getElementById('issueAnalysis').innerHTML = '<p class="text-muted">日志已清空</p>';
+        }
+
+        // 导出日志
+        function exportLogs() {
+            const logs = CodeTracer.exportLogs();
+            const blob = new Blob([logs], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `code-trace-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 测试Data模块
+        function runDataModuleTest() {
+            CodeTracer.clear();
+            console.log('=== 开始Data模块测试 ===');
+            
+            // 测试各种数据访问方法
+            const fs = KGDataAPI.getFileStructure();
+            const ch = KGDataAPI.getClassHierarchy();
+            const fc = KGDataAPI.getFunctionCalls();
+            const md = KGDataAPI.getModuleDependencies();
+            const stats = KGDataAPI.getStatistics();
+            
+            console.log('Data模块测试完成');
+            renderLogs();
+            updateStats();
+            analyzeIssues();
+        }
+
+        // 测试Search功能
+        function runSearchTest() {
+            CodeTracer.clear();
+            console.log('=== 开始Search功能测试 ===');
+            
+            // 测试各种搜索场景
+            const results1 = KGDataAPI.search('User');
+            const results2 = KGDataAPI.search('Base');
+            const results3 = KGDataAPI.search('');
+            const results4 = KGDataAPI.search(null);
+            const results5 = KGDataAPI.search('NonExistent');
+            
+            console.log('Search测试完成');
+            renderLogs();
+            updateStats();
+            analyzeIssues();
+        }
+
+        // 测试边界条件
+        function runEdgeCaseTest() {
+            CodeTracer.clear();
+            console.log('=== 开始边界条件测试 ===');
+            
+            // 测试特殊输入
+            try {
+                KGDataAPI.search(undefined);
+            } catch (e) {
+                CodeTracer.error('test', 1, e);
+            }
+            
+            try {
+                KGDataAPI.search(123);
+            } catch (e) {
+                CodeTracer.error('test', 2, e);
+            }
+            
+            try {
+                KGDataAPI.search({});
+            } catch (e) {
+                CodeTracer.error('test', 3, e);
+            }
+            
+            console.log('边界条件测试完成');
+            renderLogs();
+            updateStats();
+            analyzeIssues();
+        }
+
+        // 混沌测试
+        function runChaosTest() {
+            CodeTracer.clear();
+            console.log('=== 开始混沌测试 ===');
+            
+            // 快速连续调用
+            for (let i = 0; i < 100; i++) {
+                KGDataAPI.search(`query${i}`);
+            }
+            
+            // 交替调用不同方法
+            for (let i = 0; i < 50; i++) {
+                KGDataAPI.getFileStructure();
+                KGDataAPI.getClassHierarchy();
+                KGDataAPI.search('test');
+            }
+            
+            console.log('混沌测试完成');
+            renderLogs();
+            updateStats();
+            analyzeIssues();
+        }
+
+        // 分析问题
+        function analyzeIssues() {
+            const issues = CodeTracer.analyze();
+            const container = document.getElementById('issueAnalysis');
+            
+            if (issues.length === 0) {
+                container.innerHTML = '<p style="color: #10b981;"><i class="fas fa-check-circle"></i> 未发现明显问题</p>';
+                return;
+            }
+
+            container.innerHTML = issues.map(issue => {
+                const icon = issue.type === 'error' ? 'fa-times-circle' : 
+                            issue.type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle';
+                const color = issue.type === 'error' ? '#ef4444' : 
+                             issue.type === 'warning' ? '#f59e0b' : '#3b82f6';
+                return `<p style="color: ${color};"><i class="fas ${icon}"></i> ${issue.message}</p>`;
+            }).join('');
+        }
+
+        // 定期更新
+        setInterval(() => {
+            updateStats();
+            if (CodeTracer.logs.length > 0) {
+                renderLogs();
+            }
+        }, 1000);
+
+        // 初始显示
+        console.log('代码追踪测试页面已加载');
+        console.log('CodeTracer可用:', typeof CodeTracer !== 'undefined');
+        console.log('KGDataAPI可用:', typeof KGDataAPI !== 'undefined');
+    </script>
+</body>
+</html>

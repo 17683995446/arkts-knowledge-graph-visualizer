@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>最小XSS测试</title></head>
+<body>
+<div id="test" style="width:400px;height:400px;"></div>
+<script src="../js/graph.js?v=50"></script>
+<script>
+// 测试1: escapeHtml是否工作
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+console.log('escapeHtml test:', escapeHtml('<script>alert("xss")</script>'));
+
+// 测试2: GraphVisualizer with XSS label
+const gv = new GraphVisualizer('test');
+console.log('Creating GraphVisualizer...');
+gv.init([{ id: '1', label: '<script>alert("xss")</script>' }], []);
+console.log('GraphVisualizer init done. No alert should have appeared.');
+</script>
+</body></html>

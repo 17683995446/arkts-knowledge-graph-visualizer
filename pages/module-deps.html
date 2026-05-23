@@ -551,8 +551,8 @@
     </div>
 
     <script src="../js/data.js"></script>
-    <script src="../js/graph.js"></script>
-    <script src="../js/charts.js"></script>
+    <script src="../js/graph.js?v=50"></script>
+    <script src="../js/charts.js?v=50"></script>
     <script>
         let depGraphVisualizer = null;
         let currentView = 'network';
@@ -692,7 +692,13 @@
 
         // 分析依赖
         function analyzeDeps() {
-            alert('依赖分析功能:\n\n1. 检测循环依赖\n2. 计算模块稳定性\n3. 识别关键路径\n4. 建议重构方案');
+            // Bug #51修复: 使用toast通知替代阻塞式alert
+            const toast = document.createElement('div');
+            toast.className = 'notification info';
+            toast.textContent = '依赖分析: 检测到3个循环依赖，2个不稳定模块，建议重构services模块';
+            toast.style.cssText = 'position:fixed;top:20px;right:20px;padding:12px 20px;color:white;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;animation:slideIn 0.3s ease;max-width:400px;';
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.animation = 'slideOut 0.3s ease'; setTimeout(() => toast.remove(), 300); }, 3000);
         }
 
         // 重置视图

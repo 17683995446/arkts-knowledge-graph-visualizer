@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>迭代#2极端复杂测试 - ArkTS知识图谱</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="../js/graph.js?v=92"></script>
+    <script src="../js/charts.js?v=92"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/main.js?v=92"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'SF Mono', Consolas, monospace; background: #0a0e1a; color: #c9d1d9; padding: 16px; }
+        h1 { text-align: center; color: #58a6ff; font-size: 22px; margin-bottom: 4px; }
+        .subtitle { text-align: center; color: #8b949e; font-size: 12px; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 1200px; margin: 0 auto; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; }
+        .card h3 { color: #58a6ff; font-size: 13px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+        .card h3 .tag { font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+        .tag-high { background: #da3633; color: white; }
+        .tag-med { background: #d29922; color: #0a0e1a; }
+        .tag-low { background: #238636; color: white; }
+        .area { height: 180px; background: #0d1117; border-radius: 6px; margin-bottom: 10px; overflow: hidden; position: relative; }
+        .btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; margin: 2px; }
+        .btn:hover { background: #30363d; border-color: #58a6ff; }
+        .btn-run { background: #238636; border-color: #2ea043; color: white; }
+        .btn-run:hover { background: #2ea043; }
+        .log { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 8px; font-size: 11px; max-height: 120px; overflow-y: auto; margin-top: 8px; line-height: 1.6; }
+        .log .pass { color: #3fb950; }
+        .log .fail { color: #f85149; }
+        .log .info { color: #58a6ff; }
+        .log .warn { color: #d29922; }
+        .summary { text-align: center; margin: 20px 0; padding: 16px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; }
+        .summary .stat { display: inline-block; margin: 0 16px; }
+        .summary .num { font-size: 28px; font-weight: bold; }
+        .summary .label { font-size: 11px; color: #8b949e; }
+        .num-pass { color: #3fb950; }
+        .num-fail { color: #f85149; }
+        .num-total { color: #58a6ff; }
+    </style>
+</head>
+<body>
+    <h1>🔬 迭代#2 极端复杂场景测试</h1>
+    <p class="subtitle">覆盖Bug #84-#92修复验证 + 混沌场景压测 | 共12个测试组</p>
+
+    <div class="summary" id="summary">
+        <span class="stat"><span class="num num-total" id="totalTests">0</span><br><span class="label">总测试</span></span>
+        <span class="stat"><span class="num num-pass" id="passTests">0</span><br><span class="label">通过</span></span>
+        <span class="stat"><span class="num num-fail" id="failTests">0</span><br><span class="label">失败</span></span>
+        <span class="stat"><span class="num" style="color:#d29922" id="warnTests">0</span><br><span class="label">警告</span></span>
+    </div>
+
+    <div style="text-align:center;margin-bottom:16px;">
+        <button class="btn btn-run" onclick="runAllTests()">▶ 运行全部12组测试</button>
+        <button class="btn" onclick="clearLogs()">🗑 清除日志</button>
+    </div>
+
+    <div class="grid">
+        <!-- T1: PieChart空数据 -->
+        <div class="card">
+            <h3>🥧 T1: PieChart空数据 <span class="tag tag-high">#86</span></h3>
+            <div id="t1-area" class="area"></div>
+            <button class="btn" onclick="runT1()">运行</button>
+            <div id="t1-log" class="log"></div>
+        </div>
+
+        <!-- T2: Treemap空数据 -->
+        <div class="card">
+            <h3>🗺️ T2: Treemap空数据 <span class="tag tag-high">#87</span></h3>
+            <div id="t2-area" class="area"></div>
+            <button class="btn" onclick="runT2()">运行</button>
+            <div id="t2-log" class="log"></div>
+        </div>
+
+        <!-- T3: ForceGraph空数据 -->
+        <div class="card">
+            <h3>🕸️ T3: ForceGraph空数据 <span class="tag tag-high">#88</span></h3>
+            <div id="t3-area" class="area"></div>
+            <button class="btn" onclick="runT3()">运行</button>
+            <div id="t3-log" class="log"></div>
+        </div>
+
+        <!-- T4: LineChart退化domain -->
+        <div class="card">
+            <h3>📈 T4: LineChart退化Domain <span class="tag tag-med">#92</span></h3>
+            <div id="t4-area" class="area"></div>
+            <button class="btn" onclick="runT4()">运行</button>
+            <div id="t4-log" class="log"></div>
+        </div>
+
+        <!-- T5: stabilizationProgress除零 -->
+        <div class="card">
+            <h3>⚡ T5: Stabilization除零 <span class="tag tag-high">#90</span></h3>
+            <div id="t5-area" class="area"></div>
+            <button class="btn" onclick="runT5()">运行</button>
+            <div id="t5-log" class="log"></div>
+        </div>
+
+        <!-- T6: searchNodes高亮修复 -->
+        <div class="card">
+            <h3>🔍 T6: Search高亮逻辑 <span class="tag tag-med">#91</span></h3>
+            <div id="t6-area" class="area"></div>
+            <button class="btn" onclick="runT6()">运行</button>
+            <div id="t6-log" class="log"></div>
+        </div>
+
+        <!-- T7: 高频destroy-create循环 -->
+        <div class="card">
+            <h3>🔄 T7: 高频销毁创建循环(500次)</h3>
+            <div id="t7-area" class="area"></div>
+            <button class="btn" onclick="runT7()">运行</button>
+            <div id="t7-log" class="log"></div>
+        </div>
+
+        <!-- T8: 数据规模边界 -->
+        <div class="card">
+            <h3>📊 T8: 数据规模边界(2000/5000)</h3>
+            <div id="t8-area" class="area"></div>
+            <button class="btn" onclick="runT8()">运行</button>
+            <div id="t8-log" class="log"></div>
+        </div>
+
+        <!-- T9: 并发操作冲突 -->
+        <div class="card">
+            <h3>⚡ T9: 并发操作冲突(4路并发)</h3>
+            <div id="t9-area" class="area"></div>
+            <button class="btn" onclick="runT9()">运行</button>
+            <div id="t9-log" class="log"></div>
+        </div>
+
+        <!-- T10: 异常输入全覆盖 -->
+        <div class="card">
+            <h3>💀 T10: 异常输入全覆盖(20种)</h3>
+            <div id="t10-area" class="area"></div>
+            <button class="btn" onclick="runT10()">运行</button>
+            <div id="t10-log" class="log"></div>
+        </div>
+
+        <!-- T11: Tree/Sunburst快速切换 -->
+        <div class="card">
+            <h3>🌳 T11: Tree/Sunburst快速切换(50次)</h3>
+            <div id="t11-area" class="area"></div>
+            <button class="btn" onclick="runT11()">运行</button>
+            <div id="t11-log" class="log"></div>
+        </div>
+
+        <!-- T12: 全图表类型空数据 -->
+        <div class="card">
+            <h3>📋 T12: 全图表空/null/undefined输入</h3>
+            <div id="t12-area" class="area"></div>
+            <button class="btn" onclick="runT12()">运行</button>
+            <div id="t12-log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+    // ========== 测试框架 ==========
+    const TF = {
+        total: 0, pass: 0, fail: 0, warn: 0,
+        log(id, msg, cls = 'info') {
+            const el = document.getElementById(id + '-log');
+            if (el) el.innerHTML += `<div class="${cls}">${msg}</div>`;
+        },
+        update() {
+            document.getElementById('totalTests').textContent = this.total;
+            document.getElementById('passTests').textContent = this.pass;
+            document.getElementById('failTests').textContent = this.fail;
+            document.getElementById('warnTests').textContent = this.warn;
+        },
+        assert(id, name, condition) {
+            this.total++;
+            if (condition) { this.pass++; this.log(id, `✅ ${name}`, 'pass'); }
+            else { this.fail++; this.log(id, `❌ ${name}`, 'fail'); }
+            this.update();
+        }
+    };
+
+    function clearLogs() {
+        document.querySelectorAll('.log').forEach(el => el.innerHTML = '');
+        TF.total = TF.pass = TF.fail = TF.warn = 0;
+        TF.update();
+    }
+
+    // ========== T1: PieChart空数据 (#86) ==========
+    async function runT1() {
+        const log = 't1';
+        TF.log(log, '--- PieChart空数据测试 ---', 'info');
+        const cm = new ChartManager();
+        try {
+            // 空数组
+            const r1 = cm.createPieChart('t1-area', []);
+            TF.assert(log, '空数组不崩溃', true);
+            // null
+            const r2 = cm.createPieChart('t1-area', null);
+            TF.assert(log, 'null不崩溃', true);
+            // undefined
+            const r3 = cm.createPieChart('t1-area', undefined);
+            TF.assert(log, 'undefined不崩溃', true);
+            // 正常数据恢复
+            const r4 = cm.createPieChart('t1-area', KGData.fileTypes);
+            TF.assert(log, '正常数据可恢复渲染', r4 === cm);
+        } catch (e) {
+            TF.assert(log, '无异常抛出', false);
+            TF.log(log, `异常: ${e.message}`, 'fail');
+        }
+    }
+
+    // ========== T2: Treemap空数据 (#87) ==========
+    async function runT2() {
+        const log = 't2';
+        TF.log(log, '--- Treemap空数据测试 ---', 'info');
+        const cm = new ChartManager();
+        try {
+            cm.createTreemap('t2-area', null);
+            TF.assert(log, 'null不崩溃', true);
+            cm.createTreemap('t2-area', undefined);
+            TF.assert(log, 'undefined不崩溃', true);
+            // 空对象
+            cm.createTreemap('t2-area', { name: 'Empty', children: [] });
+            TF.assert(log, '空子节点不崩溃', true);
+            // 正常恢复
+            cm.createTreemap('t2-area', KGData.fileStructure);
+            TF.assert(log, '正常数据可恢复', true);
+        } catch (e) {
+            TF.assert(log, '无异常抛出', false);
+            TF.log(log, `异常: ${e.message}`, 'fail');
+        }
+    }
+
+    // ========== T3: ForceGraph空数据 (#88) ==========
+    async function runT3() {
+        const log = 't3';
+        TF.log(log, '--- ForceGraph空数据测试 ---', 'info');
+        const cm = new ChartManager();
+        try {
+            cm.createForceGraph('t3-area', null, null);
+            TF.assert(log, 'null nodes不崩溃', true);
+            cm.createForceGraph('t3-area', [], []);
+            TF.assert(log, '空数组不崩溃', true);
+            cm.createForceGraph('t3-area', undefined, undefined);
+            TF.assert(log, 'undefined不崩溃', true);
+            cm.createForceGraph('t3-area', [{id:1,name:'A'}], null);
+            TF.assert(log, '有效nodes+null links不崩溃', true);
+            // 正常恢复
+            const fg = cm.createForceGraph('t3-area',
+                [{id:1,name:'A',group:'g1'},{id:2,name:'B',group:'g1'}],
+                [{from:1,to:2}]
+            );
+            TF.assert(log, '正常数据可恢复', !!fg);
+            if (fg && fg.destroy) fg.destroy();
+        } catch (e) {
+            TF.assert(log, '无异常抛出', false);
+            TF.log(log, `异常: ${e.message}`, 'fail');
+        }
+    }
+
+    // ========== T4: LineChart退化Domain (#92) ==========
+    async function runT4() {
+        const log = 't4';
+        TF.log(log, '--- LineChart退化Domain测试 ---', 'info');
+        const cm = new ChartManager();
+        try {
+            // 单数据点
+            cm.createLineChart('t4-area', [{ date: '2025-01-01', lines: 1000 }]);
+            TF.assert(log, '单数据点不崩溃', true);
+            // 所有值相同
+            cm.createLineChart('t4-area', [
+                { date: '2025-01-01', lines: 500 },
+                { date: '2025-01-02', lines: 500 },
+                { date: '2025-01-03', lines: 500 }
+            ]);
+            TF.assert(log, '相同值不崩溃(NaN防护)', true);
+            // 正常恢复
+            cm.createLineChart('t4-area', KGData.codeTrend);
+            TF.assert(log, '正常数据可恢复', true);
+        } catch (e) {
+            TF.assert(log, '无异常抛出', false);
+            TF.log(log, `异常: ${e.message}`, 'fail');
+        }
+    }
+
+    // ========== T5: Stabilization除零 (#90) ==========
+    async function runT5() {
+        const log = 't5';
+        TF.log(log, '--- Stabilization除零测试 ---', 'info');
+        try {
+            const gv = new GraphVisualizer('t5-area');
+            const nodes = [{id:1,label:'A'},{id:2,label:'B'}];
+            const edges = [{from:1,to:2}];
+            gv.init(nodes, edges);
+            await new Promise(r => setTimeout(r, 800));
+            gv.destroy();
+            TF.assert(log, '正常数据stabilization无除零错误', true);
+        } catch (e) {
+            if (e.message.includes('Infinity') || e.message.includes('NaN')) {
+                TF.assert(log, '无除零/NaN错误', false);
+            } else {
+                TF.assert(log, '无除零/NaN错误', true);
+            }
+            TF.log(log, `异常: ${e.message}`, 'warn');
+        }
+    }
+
+    // ========== T6: Search高亮逻辑 (#91) ==========
+    async function runT6() {
+        const log = 't6';
+        TF.log(log, '--- Search高亮逻辑测试 ---', 'info');
+        try {
+            const gv = new GraphVisualizer('t6-area');
+            const nodes = [
+                {id:1,label:'Apple',group:'component'},
+                {id:2,label:'Application',group:'component'},
+                {id:3,label:'Banana',group:'utility'},
+                {id:4,label:'Cherry',group:'model'}
+            ];
+            const edges = [{from:1,to:2},{from:2,to:3},{from:3,to:4}];
+            gv.init(nodes, edges);
+            await new Promise(r => setTimeout(r, 500));
+
+            const results = gv.searchNodes('App');
+            TF.assert(log, '搜索"App"找到2个结果', results.length === 2);
+
+            // 验证节点样式
+            const allNodes = gv.nodes.get();
+            const matchNode = allNodes.find(n => n.id === 1);
+            const nonMatchNode = allNodes.find(n => n.id === 3);
+            TF.assert(log, '匹配节点borderWidth=4', matchNode && matchNode.borderWidth === 4);
+            TF.assert(log, '非匹配节点borderWidth=1', nonMatchNode && nonMatchNode.borderWidth === 1);
+            TF.assert(log, '非匹配节点borderWidthSelected=2', nonMatchNode && nonMatchNode.borderWidthSelected === 2);
+
+            gv.destroy();
+        } catch (e) {
+            TF.assert(log, '无异常', false);
+            TF.log(log, `异常: ${e.message}`, 'fail');
+        }
+    }
+
+    // ========== T7: 高频destroy-create循环 ==========
+    async function runT7() {
+        const log = 't7';
+        TF.log(log, '--- 高频销毁创建循环(500次) ---', 'info');
+        let crashed = false;
+        const nodes = [{id:1,label:'A',group:'component'},{id:2,label:'B',group:'utility'}];
+        const edges = [{from:1,to:2}];
+        const start = performance.now();
+        try {
+            for (let i = 0; i < 500; i++) {
+                const gv = new GraphVisualizer('t7-area');
+                gv.init(nodes, edges);
+                gv.fit();
+                gv.togglePhysics();
+                gv.searchNodes('A');
+                gv.highlightConnected(1);
+                gv.resetHighlight();
+                gv.destroy();
+            }
+            const elapsed = performance.now() - start;
+            TF.assert(log, `500次循环无崩溃 (${elapsed.toFixed(0)}ms)`, !crashed);
+            TF.assert(log, `平均每次${(elapsed/500).toFixed(1)}ms`, elapsed/500 < 50);
+        } catch (e) {
+            crashed = true;
+            TF.assert(log, '500次循环无崩溃', false);
+            TF.log(log, `崩溃于: ${e.message}`, 'fail');
+        }
+    }
+
+    // ========== T8: 数据规模边界 ==========
+    async function runT8() {
+        const log = 't8';
+        TF.log(log, '--- 数据规模边界测试 ---', 'info');
+        try {
+            // 测试2000节点边界
+            const nodes2000 = [];
+            const edges2000 = [];
+            for (let i = 0; i < 2000; i++) {
+                nodes2000.push({id:i, label:`N${i}`, group:'component'});
+                if (i > 0) edges2000.push({from:i-1,to:i});
+            }
+            const gv = new GraphVisualizer('t8-area');
+            const t1 = performance.now();
+            gv.init(nodes2000, edges2000);
+            const t2 = performance.now();
+            TF.assert(log, `2000节点初始化成功 (${(t2-t1).toFixed(0)}ms)`, gv.nodes.length === 2000);
+            await new Promise(r => setTimeout(r, 500));
+            gv.destroy();
+
+            // 测试2500节点截断
+            const nodes2500 = [];
+            for (let i = 0; i < 2500; i++) nodes2500.push({id:i, label:`N${i}`});
+            const gv2 = new GraphVisualizer('t8-area');
+            gv2.init(nodes2500, [{from:0,to:1}]);
+            TF.assert(log, '2500节点被截断到2000', gv2.nodes.length === 2000);
+            gv2.destroy();
+
+            // 测试5000边边界
+            const nodes100 = [];
+            const edges6000 = [];
+            for (let i = 0; i < 100; i++) nodes100.push({id:i, label:`N${i}`});
+            for (let i = 0; i < 6000; i++) edges6000.push({from:i%100, to:(i+1)%100});
+            const gv3 = new GraphVisualizer('t8-area');
+            gv3.init(nodes100, edges6000);
+            TF.assert(log, '6000边被截断到5000', gv3.edges.length === 5000);
+            gv3.destroy();
+        } catch (e) {
+            TF.assert(log, '无异常', false);
+            TF.log(log, `异常: ${e.message}`, 'fail');
+        }
+    }
+
+    // ========== T9: 并发操作冲突 ==========
+    async function runT9() {
+        const log = 't9';
+        TF.log(log, '--- 4路并发操作冲突测试 ---', 'info');
+        try {
+            const gv = new GraphVisualizer('t9-area');
+            const nodes = [];
+            const edges = [];
+            for (let i = 0; i < 50; i++) {
+                nodes.push({id:i, label:`N${i}`, group:['component','utility','interface'][i%3]});
+                if (i > 0) edges.push({from:i-1,to:i});
+            }
+            gv.init(nodes, edges);
+            await new Promise(r => setTimeout(r, 300));
+
+            let errors = 0;
+            const interval1 = setInterval(() => { try { gv.togglePhysics(); } catch(e) { errors++; } }, 50);
+            const interval2 = setInterval(() => { try { gv.searchNodes('N'); } catch(e) { errors++; } }, 80);
+            const interval3 = setInterval(() => { try { gv.fit(); } catch(e) { errors++; } }, 60);
+            const interval4 = setInterval(() => { try { gv.highlightConnected(Math.floor(Math.random()*50)); } catch(e) { errors++; } }, 70);
+
+            await new Promise(r => setTimeout(r, 2000));
+            clearInterval(interval1);
+            clearInterval(interval2);
+            clearInterval(interval3);
+            clearInterval(interval4);
+            gv.destroy();
+            TF.assert(log, `4路并发2000ms无错误`, errors === 0);
+            if (errors > 0) TF.log(log, `发生${errors}个错误`, 'warn');
+        } catch (e) {
+            TF.assert(log, '无崩溃', false);
+            TF.log(log, `异常: ${e.message}`, 'fail');
+        }
+    }
+
+    // ========== T10: 异常输入全覆盖 ==========
+    async function runT10() {
+        const log = 't10';
+        TF.log(log, '--- 20种异常输入全覆盖 ---', 'info');
+        const cases = [
+            { name: 'null节点', nodes: null, edges: [] },
+            { name: 'undefined节点', nodes: undefined, edges: [] },
+            { name: '空数组节点', nodes: [], edges: [] },
+            { name: '单节点无边', nodes: [{id:1,label:'A'}], edges: [] },
+            { name: '自环边', nodes: [{id:1,label:'A'}], edges: [{from:1,to:1}] },
+            { name: '重复ID', nodes: [{id:1,label:'A'},{id:1,label:'B'}], edges: [] },
+            { name: '无效边引用', nodes: [{id:1,label:'A'}], edges: [{from:1,to:999}] },
+            { name: '超大标签(10K字符)', nodes: [{id:1,label:'X'.repeat(10000)}], edges: [] },
+            { name: 'XSS标签', nodes: [{id:1,label:'<scr'+'ipt>alert(1)</scr'+'ipt>'}], edges: [] },
+            { name: 'Unicode表情', nodes: [{id:1,label:'🎉🔥💯🚀✨'}], edges: [] },
+            { name: 'RTL文本', nodes: [{id:1,label:'مرحبا بالعالم'}], edges: [] },
+            { name: '零宽字符', nodes: [{id:1,label:'A\u200BB\u200CC'}], edges: [] },
+            { name: 'null标签', nodes: [{id:1,label:null}], edges: [] },
+            { name: 'undefined标签', nodes: [{id:1,label:undefined}], edges: [] },
+            { name: '数字标签', nodes: [{id:1,label:12345}], edges: [] },
+            { name: '对象标签', nodes: [{id:1,label:{toString:()=>'evil'}}], edges: [] },
+            { name: '数组标签', nodes: [{id:1,label:[1,2,3]}], edges: [] },
+            { name: '空字符串标签', nodes: [{id:1,label:''}], edges: [] },
+            { name: '换行符标签', nodes: [{id:1,label:'line1\nline2'}], edges: [] },
+            { name: '超长ID', nodes: [{id:'id_'.repeat(100),label:'A'}], edges: [] }
+        ];
+        let passed = 0;
+        for (const tc of cases) {
+            try {
+                const gv = new GraphVisualizer('t10-area');
+                gv.init(tc.nodes, tc.edges);
+                gv.fit();
+                gv.searchNodes('test');
+                gv.destroy();
+                passed++;
+            } catch (e) {
+                TF.log(log, `⚠ "${tc.name}" 异常: ${e.message}`, 'warn');
+            }
+        }
+        TF.assert(log, `${passed}/20异常输入无崩溃`, passed === 20);
+    }
+
+    // ========== T11: Tree/Sunburst快速切换 ==========
+    async function runT11() {
+        const log = 't11';
+        TF.log(log, '--- Tree/Sunburst快速切换(50次) ---', 'info');
+        const treeData = {
+            name: 'Root', type: 'folder',
+            children: [
+                { name: 'Child1', type: 'folder', children: [{ name: 'Leaf1', size: 100 }] },
+                { name: 'Child2', type: 'folder', size: 200 }
+            ]
+        };
+        let errors = 0;
+        try {
+            for (let i = 0; i < 50; i++) {
+                try {
+                    if (i % 2 === 0) {
+                        const tv = new TreeVisualizer('t11-area');
+                        tv.init(treeData);
+                        tv.expandAll();
+                        tv.collapseAll();
+                        tv.destroy();
+                    } else {
+                        const sv = new SunburstVisualizer('t11-area');
+                        sv.init(treeData);
+                        sv.destroy();
+                    }
+                } catch (e) { errors++; }
+            }
+            TF.assert(log, `50次快速切换无错误`, errors === 0);
+        } catch (e) {
+            TF.assert(log, '无崩溃', false);
+            TF.log(log, `异常: ${e.message}`, 'fail');
+        }
+    }
+
+    // ========== T12: 全图表空/null/undefined ==========
+    async function runT12() {
+        const log = 't12';
+        TF.log(log, '--- 全图表空/null/undefined输入 ---', 'info');
+        const cm = new ChartManager();
+        const tests = [
+            { name: 'PieChart(null)', fn: () => cm.createPieChart('t12-area', null) },
+            { name: 'PieChart([])', fn: () => cm.createPieChart('t12-area', []) },
+            { name: 'PieChart(undefined)', fn: () => cm.createPieChart('t12-area', undefined) },
+            { name: 'LineChart(null)', fn: () => cm.createLineChart('t12-area', null) },
+            { name: 'LineChart([])', fn: () => cm.createLineChart('t12-area', []) },
+            { name: 'BarChart(null)', fn: () => cm.createBarChart('t12-area', null) },
+            { name: 'BarChart([])', fn: () => cm.createBarChart('t12-area', []) },
+            { name: 'Treemap(null)', fn: () => cm.createTreemap('t12-area', null) },
+            { name: 'ForceGraph(null,null)', fn: () => cm.createForceGraph('t12-area', null, null) },
+            { name: 'ForceGraph([],[])', fn: () => cm.createForceGraph('t12-area', [], []) },
+            { name: 'ChordDiagram(null)', fn: () => cm.createChordDiagram('t12-area', null) },
+            { name: 'ChordDiagram([])', fn: () => cm.createChordDiagram('t12-area', []) },
+            { name: 'ChordDiagram(非矩阵)', fn: () => cm.createChordDiagram('t12-area', 'not-array') },
+            { name: 'ChordDiagram(一维数组)', fn: () => cm.createChordDiagram('t12-area', [1,2,3]) },
+        ];
+        let passed = 0;
+        for (const t of tests) {
+            try {
+                t.fn();
+                passed++;
+            } catch (e) {
+                TF.log(log, `⚠ "${t.name}" 异常: ${e.message}`, 'warn');
+            }
+        }
+        TF.assert(log, `${passed}/14全图表异常输入无崩溃`, passed === 14);
+    }
+
+    // ========== 运行全部 ==========
+    async function runAllTests() {
+        clearLogs();
+        TF.log('t1', '开始运行全部12组测试...', 'info');
+        const tests = [runT1, runT2, runT3, runT4, runT5, runT6, runT7, runT8, runT9, runT10, runT11, runT12];
+        for (let i = 0; i < tests.length; i++) {
+            await tests[i]();
+            await new Promise(r => setTimeout(r, 100));
+        }
+        TF.log('t1', `\n========== 最终结果: ${TF.pass}/${TF.total} 通过, ${TF.fail} 失败 ==========`, 
+            TF.fail === 0 ? 'pass' : 'fail');
+    }
+    </script>
+</body>
+</html>

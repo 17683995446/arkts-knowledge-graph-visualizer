@@ -272,8 +272,8 @@
     </main>
 
     <script src="../js/data.js"></script>
-    <script src="../js/graph.js"></script>
-    <script src="../js/charts.js"></script>
+    <script src="../js/graph.js?v=50"></script>
+    <script src="../js/charts.js?v=50"></script>
     <script>
         // 查询历史 - 修复Bug #27: 处理localStorage中可能存在的空字符串或其他无效JSON
         function loadQueryHistory() {
@@ -401,7 +401,7 @@ SELECT
     line_end,
     line_count
 FROM functions
-WHERE name LIKE '%${query}%'
+WHERE name LIKE '%${query.replace(/'/g, "''")}%'
 ORDER BY line_count DESC
 LIMIT 50;`;
         }
@@ -550,13 +550,17 @@ LIMIT 50;`;
                 queryNetwork = new vis.Network(container, vizData, options);
             } else {
                 // 图表模式
+                // Bug #98修复: 清理旧的图表和ChartManager实例
+                if (window._queryChartManager) {
+                    window._queryChartManager.destroy();
+                }
                 const chartData = vizData.nodes.map((n, i) => ({
                     label: n.label,
                     value: Math.random() * 100
                 }));
                 
-                const chartManager = new ChartManager();
-                chartManager.createBarChart('vizContainer', chartData, {
+                window._queryChartManager = new ChartManager();
+                window._queryChartManager.createBarChart('vizContainer', chartData, {
                     height: 400,
                     margin: { top: 20, right: 20, bottom: 100, left: 60 }
                 });
@@ -600,8 +604,10 @@ LIMIT 50;`;
         }
 
         function escapeHtml(str) {
+            // Bug #62修复: 与main.js保持一致，处理null/undefined
+            if (str === null || str === undefined) return '';
             const div = document.createElement('div');
-            div.textContent = str;
+            div.textContent = String(str);
             return div.innerHTML;
         }
 
@@ -691,11 +697,40 @@ LIMIT 50;`;
 
         function copySQL() {
             const sql = document.getElementById('sqlCode').textContent;
+            // Bug #97修复: 防止非HTTPS环境下navigator.clipboard为undefined
+            if (!navigator.clipboard || !navigator.clipboard.writeText) {
+                // 降级方案: 使用textarea+execCommand
+                const textarea = document.createElement('textarea');
+                textarea.value = sql;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    showNotification('SQL已复制到剪贴板', 'success');
+                } catch (e) {
+                    showNotification('复制失败，请手动复制', 'error');
+                }
+                document.body.removeChild(textarea);
+                return;
+            }
             navigator.clipboard.writeText(sql).then(() => {
-                alert('SQL已复制到剪贴板');
+                // Bug #50修复: 使用toast通知替代阻塞式alert
+                const toast = document.createElement('div');
+                toast.className = 'notification success';
+                toast.textContent = 'SQL已复制到剪贴板';
+                toast.style.cssText = 'position:fixed;top:20px;right:20px;padding:12px 20px;color:white;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;animation:slideIn 0.3s ease;max-width:400px;';
+                document.body.appendChild(toast);
+                setTimeout(() => { toast.style.animation = 'slideOut 0.3s ease'; setTimeout(() => toast.remove(), 300); }, 2000);
             }).catch(err => {
                 console.error('复制失败:', err);
-                alert('复制失败，请手动复制');
+                const toast = document.createElement('div');
+                toast.className = 'notification error';
+                toast.textContent = '复制失败，请手动复制';
+                toast.style.cssText = 'position:fixed;top:20px;right:20px;padding:12px 20px;color:white;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;animation:slideIn 0.3s ease;max-width:400px;';
+                document.body.appendChild(toast);
+                setTimeout(() => { toast.style.animation = 'slideOut 0.3s ease'; setTimeout(() => toast.remove(), 300); }, 2000);
             });
         }
 
@@ -716,11 +751,20 @@ LIMIT 50;`;
             if (!currentResults || !currentResults.data) return;
             
             const data = currentResults.data;
+            // Bug #96修复: 空数组时安全返回
+            if (!Array.isArray(data) || data.length === 0) {
+                showNotification('没有可导出的数据', 'warning');
+                return;
+            }
             const columns = Object.keys(data[0]);
             
             let csv = columns.join(',') + '\n';
+            // Bug #45修复: 正确转义CSV字段中的双引号和换行符
             csv += data.map(row => 
-                columns.map(col => `"${row[col]}"`).join(',')
+                columns.map(col => {
+                    const val = String(row[col] ?? '');
+                    return `"${val.replace(/"/g, '""')}"`;
+                }).join(',')
             ).join('\n');
             
             const blob = new Blob([csv], { type: 'text/csv' });
@@ -735,27 +779,32 @@ LIMIT 50;`;
 
         function exportResults() {
             if (!currentResults) {
-                alert('请先执行查询');
+                // Bug #52修复: 使用toast通知替代阻塞式alert
+                showError('请先执行查询');
                 return;
             }
             exportCSV();
         }
 
         function showHelp() {
-            document.getElementById('helpModal').style.display = 'flex';
+            // Bug #53修复: 添加null检查
+            const modal = document.getElementById('helpModal');
+            if (modal) modal.style.display = 'flex';
         }
 
         function closeHelp() {
-            document.getElementById('helpModal').style.display = 'none';
+            // Bug #53修复: 添加null检查
+            const modal = document.getElementById('helpModal');
+            if (modal) modal.style.display = 'none';
         }
 
-        // 点击模态框外部关闭
-        window.onclick = function(event) {
+        // Bug #43修复: 使用addEventListener替代直接赋值，避免覆盖其他handler
+        window.addEventListener('click', function(event) {
             const modal = document.getElementById('helpModal');
-            if (event.target === modal) {
+            if (modal && event.target === modal) {
                 modal.style.display = 'none';
             }
-        }
+        });
     </script>
     </div>
 

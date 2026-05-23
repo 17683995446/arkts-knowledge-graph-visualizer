@@ -533,7 +533,7 @@
     </div>
 
     <script src="../js/data.js"></script>
-    <script src="../js/charts.js"></script>
+    <script src="../js/charts.js?v=50"></script>
     <script>
         // 初始化页面
         document.addEventListener('DOMContentLoaded', function() {
@@ -580,9 +580,14 @@
 
         function createComplexityChart(containerId, data) {
             const container = d3.select(`#${containerId}`);
+            const containerNode = container.node();
+            // Bug #54修复: 添加容器null检查
+            if (!containerNode) { console.warn('createComplexityChart: container not found'); return; }
             container.selectAll('*').remove();
 
-            const width = container.node().getBoundingClientRect().width;
+            // Bug #64修复: 防止width为0导致负radius
+            let width = containerNode.getBoundingClientRect().width;
+            width = Math.max(width, 300);
             const height = 260;
             const radius = Math.min(width, height) / 2 - 40;
 

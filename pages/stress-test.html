@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>压力测试 - ArkTS知识图谱</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="../libs/vis-network.min.js"></script>
+    <script src="../libs/d3.v7.min.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/graph.js"></script>
+    <script src="../js/charts.js"></script>
+    <style>
+        .test-panel {
+            margin: 20px;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+        }
+        .test-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .test-btn {
+            padding: 10px 20px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .test-btn:hover {
+            background: var(--primary-dark);
+        }
+        .test-btn.danger {
+            background: var(--danger-color);
+        }
+        .test-btn.danger:hover {
+            background: #dc2626;
+        }
+        .test-results {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .test-log {
+            margin: 4px 0;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .test-log.success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+        .test-log.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+        .test-log.warn {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }
+        .test-log.info {
+            color: var(--text-secondary);
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .metric-card {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        .metric-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        #testContainer {
+            height: 400px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-top: 20px;
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <nav class="sidebar" aria-label="主导航">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-project-diagram"></i>
+                    <span>ArkTS知识图谱</span>
+                </div>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="../index.html" class="nav-link">
+                        <i class="fas fa-home"></i>
+                        <span>项目概览</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="file-structure.html" class="nav-link">
+                        <i class="fas fa-folder-tree"></i>
+                        <span>文件结构</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="class-hierarchy.html" class="nav-link">
+                        <i class="fas fa-sitemap"></i>
+                        <span>类继承关系</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="function-calls.html" class="nav-link">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>函数调用</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="module-deps.html" class="nav-link">
+                        <i class="fas fa-cubes"></i>
+                        <span>模块依赖</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="statistics.html" class="nav-link">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>代码统计</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="query.html" class="nav-link">
+                        <i class="fas fa-search"></i>
+                        <span>自然语言查询</span>
+                    </a>
+                </li>
+                <li class="nav-item active">
+                    <a href="stress-test.html" class="nav-link">
+                        <i class="fas fa-vial"></i>
+                        <span>压力测试</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <h1 class="page-title">
+                    <i class="fas fa-vial"></i>
+                    压力测试中心
+                </h1>
+            </header>
+
+            <!-- 性能指标 -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value" id="memoryUsage">--</div>
+                    <div class="metric-label">内存使用 (MB)</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="nodeCount">--</div>
+                    <div class="metric-label">当前节点数</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="renderTime">--</div>
+                    <div class="metric-label">渲染时间 (ms)</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="fps">--</div>
+                    <div class="metric-label">FPS</div>
+                </div>
+            </div>
+
+            <!-- 测试控制面板 -->
+            <div class="test-panel">
+                <h3><i class="fas fa-flask"></i> 极端数据规模测试</h3>
+                <div class="test-controls">
+                    <button class="test-btn" onclick="testMassiveNodes(1000)">1千节点</button>
+                    <button class="test-btn" onclick="testMassiveNodes(10000)">1万节点</button>
+                    <button class="test-btn" onclick="testMassiveNodes(50000)">5万节点</button>
+                    <button class="test-btn danger" onclick="testMassiveNodes(100000)">10万节点</button>
+                </div>
+            </div>
+
+            <div class="test-panel">
+                <h3><i class="fas fa-layer-group"></i> 超深层级测试</h3>
+                <div class="test-controls">
+                    <button class="test-btn" onclick="testDeepTree(100)">100层</button>
+                    <button class="test-btn" onclick="testDeepTree(500)">500层</button>
+                    <button class="test-btn" onclick="testDeepTree(1000)">1000层</button>
+                    <button class="test-btn danger" onclick="testDeepTree(2000)">2000层</button>
+                </div>
+            </div>
+
+            <div class="test-panel">
+                <h3><i class="fas fa-bug"></i> 异常数据测试</h3>
+                <div class="test-controls">
+                    <button class="test-btn" onclick="testMaliciousData()">XSS攻击向量</button>
+                    <button class="test-btn" onclick="testCircularReference()">循环引用</button>
+                    <button class="test-btn" onclick="testEdgeCaseValues()">边界值</button>
+                    <button class="test-btn" onclick="testMemoryPressure()">内存压力</button>
+                </div>
+            </div>
+
+            <div class="test-panel">
+                <h3><i class="fas fa-bolt"></i> 并发操作测试</h3>
+                <div class="test-controls">
+                    <button class="test-btn" onclick="testClickStorm(100)">点击风暴(100次)</button>
+                    <button class="test-btn" onclick="testClickStorm(1000)">点击风暴(1000次)</button>
+                    <button class="test-btn" onclick="testRapidSwitch()">快速视图切换</button>
+                    <button class="test-btn" onclick="testConcurrentRender()">并发渲染</button>
+                </div>
+            </div>
+
+            <!-- 测试结果 -->
+            <div class="test-panel">
+                <h3><i class="fas fa-clipboard-list"></i> 测试日志</h3>
+                <div class="test-results" id="testResults">
+                    <div class="test-log info">等待测试开始...</div>
+                </div>
+            </div>
+
+            <!-- 可视化容器 -->
+            <div id="testContainer"></div>
+        </main>
+    </div>
+
+    <script src="../data/stress-test-data.js"></script>
+    <script>
+        // 测试日志
+        function log(message, type = 'info') {
+            const container = document.getElementById('testResults');
+            const entry = document.createElement('div');
+            entry.className = `test-log ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // 更新性能指标
+        function updateMetrics() {
+            if (performance.memory) {
+                const usedMB = Math.round(performance.memory.usedJSHeapSize / 1048576);
+                document.getElementById('memoryUsage').textContent = usedMB;
+            }
+        }
+
+        // 1. 超大规模节点测试
+        async function testMassiveNodes(count) {
+            log(`开始测试: ${count.toLocaleString()} 个节点`, 'info');
+            const startTime = performance.now();
+            
+            try {
+                // 生成数据
+                const nodes = StressTestData.generateMassiveNodes(count);
+                const edges = StressTestData.generateMassiveEdges(count, 0.001);
+                
+                log(`数据生成完成: ${nodes.length} 节点, ${edges.length} 边`, 'success');
+                document.getElementById('nodeCount').textContent = nodes.length;
+                
+                // 尝试渲染
+                const container = document.getElementById('testContainer');
+                container.innerHTML = '';
+                
+                const visualizer = new GraphVisualizer('testContainer');
+                
+                // 使用 requestIdleCallback 分批处理
+                if (count > 10000) {
+                    log('数据量过大，使用分批渲染策略', 'warn');
+                }
+                
+                const network = visualizer.init(nodes.slice(0, Math.min(count, 5000)), edges.slice(0, 5000));
+                
+                const renderTime = Math.round(performance.now() - startTime);
+                document.getElementById('renderTime').textContent = renderTime;
+                
+                if (network) {
+                    log(`渲染成功! 耗时: ${renderTime}ms`, 'success');
+                } else {
+                    log('渲染失败: visualizer返回null', 'error');
+                }
+                
+                updateMetrics();
+                
+                // 3秒后清理
+                setTimeout(() => {
+                    visualizer.destroy();
+                    container.innerHTML = '';
+                    log('资源已清理', 'info');
+                }, 3000);
+                
+            } catch (e) {
+                log(`测试失败: ${e.message}`, 'error');
+                console.error(e);
+            }
+        }
+
+        // 2. 超深层级树测试
+        async function testDeepTree(depth) {
+            log(`开始测试: ${depth} 层深度的树结构`, 'info');
+            const startTime = performance.now();
+            
+            try {
+                const treeData = StressTestData.generateDeepTree(depth, 2);
+                log(`树数据生成完成，深度: ${depth}`, 'success');
+                
+                const container = document.getElementById('testContainer');
+                container.innerHTML = '';
+                
+                const visualizer = new TreeVisualizer('testContainer');
+                
+                // 测试递归深度
+                let actualDepth = 0;
+                function measureDepth(node, currentDepth) {
+                    actualDepth = Math.max(actualDepth, currentDepth);
+                    if (node.children) {
+                        node.children.forEach(child => measureDepth(child, currentDepth + 1));
+                    }
+                }
+                measureDepth(treeData, 1);
+                log(`实际测量深度: ${actualDepth}`, 'info');
+                
+                // 尝试初始化（可能会栈溢出）
+                try {
+                    visualizer.init(treeData);
+                    const renderTime = Math.round(performance.now() - startTime);
+                    document.getElementById('renderTime').textContent = renderTime;
+                    log(`树渲染成功! 耗时: ${renderTime}ms`, 'success');
+                } catch (renderError) {
+                    if (renderError.message.includes('Maximum call stack')) {
+                        log('栈溢出错误: 递归深度超过JavaScript限制', 'error');
+                        // Bug #36: 需要修复 - 使用迭代替代递归
+                    } else {
+                        throw renderError;
+                    }
+                }
+                
+                updateMetrics();
+                
+            } catch (e) {
+                log(`测试失败: ${e.message}`, 'error');
+                console.error(e);
+            }
+        }
+
+        // 3. 恶意数据测试
+        async function testMaliciousData() {
+            log('开始XSS攻击向量测试', 'warn');
+            
+            try {
+                const maliciousData = StressTestData.generateMaliciousData();
+                log(`生成 ${maliciousData.length} 个恶意数据样本`, 'info');
+                
+                const container = document.getElementById('testContainer');
+                container.innerHTML = '';
+                
+                // 测试escapeHtml函数
+                maliciousData.forEach((item, i) => {
+                    const escaped = escapeHtml(item.label);
+                    const div = document.createElement('div');
+                    div.innerHTML = escaped;
+                    
+                    // 检查是否还有脚本标签
+                    if (div.querySelector('script') || div.innerHTML.includes('<script')) {
+                        log(`样本 ${i}: XSS防护失败!`, 'error');
+                    }
+                });
+                
+                log('XSS防护测试完成', 'success');
+                
+            } catch (e) {
+                log(`测试失败: ${e.message}`, 'error');
+            }
+        }
+
+        // 4. 循环引用测试
+        async function testCircularReference() {
+            log('开始循环引用测试', 'info');
+            
+            try {
+                const circularData = StressTestData.generateCircularReference();
+                
+                // 尝试JSON序列化
+                try {
+                    const json = JSON.stringify(circularData);
+                    log('JSON序列化成功（不应该发生）', 'warn');
+                } catch (e) {
+                    if (e.message.includes('circular')) {
+                        log('检测到循环引用错误 - 需要修复', 'error');
+                        // Bug #37: 需要添加循环引用检测
+                    }
+                }
+                
+            } catch (e) {
+                log(`测试失败: ${e.message}`, 'error');
+            }
+        }
+
+        // 5. 边界值测试
+        async function testEdgeCaseValues() {
+            log('开始边界值测试', 'info');
+            
+            try {
+                const edgeCases = StressTestData.generateEdgeCaseValues();
+                log(`测试 ${edgeCases.length} 个边界值`, 'info');
+                
+                edgeCases.forEach(item => {
+                    try {
+                        // 测试escapeHtml
+                        const escaped = escapeHtml(item.value);
+                        log(`${item.id}: ${typeof item.value} -> OK`, 'success');
+                    } catch (e) {
+                        log(`${item.id}: ${typeof item.value} -> 失败: ${e.message}`, 'error');
+                        // Bug #38: Symbol和Function类型会导致错误
+                    }
+                });
+                
+            } catch (e) {
+                log(`测试失败: ${e.message}`, 'error');
+            }
+        }
+
+        // 6. 内存压力测试
+        async function testMemoryPressure() {
+            log('开始内存压力测试', 'warn');
+            
+            try {
+                const initialMemory = performance.memory ? 
+                    Math.round(performance.memory.usedJSHeapSize / 1048576) : 0;
+                log(`初始内存: ${initialMemory}MB`, 'info');
+                
+                // 生成大对象
+                const pressureData = StressTestData.generateMemoryPressureData(100);
+                log(`生成 ${pressureData.length} 个大对象`, 'info');
+                
+                const afterAlloc = performance.memory ? 
+                    Math.round(performance.memory.usedJSHeapSize / 1048576) : 0;
+                log(`分配后内存: ${afterAlloc}MB (增加 ${afterAlloc - initialMemory}MB)`, 'info');
+                
+                // 尝试释放
+                pressureData.length = 0;
+                if (global.gc) {
+                    global.gc();
+                }
+                
+                setTimeout(() => {
+                    const afterFree = performance.memory ? 
+                        Math.round(performance.memory.usedJSHeapSize / 1048576) : 0;
+                    log(`释放后内存: ${afterFree}MB`, 'info');
+                }, 1000);
+                
+            } catch (e) {
+                log(`测试失败: ${e.message}`, 'error');
+            }
+        }
+
+        // 7. 点击风暴测试
+        async function testClickStorm(count) {
+            log(`开始点击风暴测试: ${count} 次连续点击`, 'warn');
+            
+            const startTime = performance.now();
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (let i = 0; i < count; i++) {
+                try {
+                    // 模拟快速切换视图
+                    if (i % 10 === 0) {
+                        const container = document.getElementById('testContainer');
+                        container.innerHTML = `<div>Storm test ${i}</div>`;
+                    }
+                    successCount++;
+                } catch (e) {
+                    errorCount++;
+                }
+            }
+            
+            const duration = Math.round(performance.now() - startTime);
+            log(`点击风暴完成: ${successCount} 成功, ${errorCount} 失败, 耗时 ${duration}ms`, 
+                errorCount > 0 ? 'error' : 'success');
+            
+            if (errorCount > 0) {
+                // Bug #39: 竞态条件问题
+                log('检测到竞态条件 - 需要添加操作队列', 'error');
+            }
+        }
+
+        // 8. 快速视图切换测试
+        async function testRapidSwitch() {
+            log('开始快速视图切换测试', 'warn');
+            
+            const container = document.getElementById('testContainer');
+            const visualizers = [];
+            
+            for (let i = 0; i < 50; i++) {
+                container.innerHTML = '';
+                
+                try {
+                    // 快速创建和销毁visualizer
+                    const viz = new GraphVisualizer('testContainer');
+                    viz.init([
+                        { id: 1, label: 'A' },
+                        { id: 2, label: 'B' }
+                    ], [{ from: 1, to: 2 }]);
+                    
+                    visualizers.push(viz);
+                    
+                    // 立即销毁
+                    viz.destroy();
+                } catch (e) {
+                    log(`切换 ${i}: 失败 - ${e.message}`, 'error');
+                    // Bug #40: 快速切换可能导致状态不一致
+                }
+            }
+            
+            log('快速视图切换测试完成', 'success');
+        }
+
+        // 9. 并发渲染测试
+        async function testConcurrentRender() {
+            log('开始并发渲染测试', 'warn');
+            
+            const container = document.getElementById('testContainer');
+            container.innerHTML = '';
+            
+            // 尝试同时创建多个可视化
+            const promises = [];
+            
+            for (let i = 0; i < 5; i++) {
+                promises.push(new Promise((resolve) => {
+                    setTimeout(() => {
+                        try {
+                            const viz = new GraphVisualizer('testContainer');
+                            viz.init([
+                                { id: i * 2, label: `Node${i}a` },
+                                { id: i * 2 + 1, label: `Node${i}b` }
+                            ], [{ from: i * 2, to: i * 2 + 1 }]);
+                            resolve({ success: true, index: i });
+                        } catch (e) {
+                            resolve({ success: false, index: i, error: e.message });
+                        }
+                    }, i * 10);
+                }));
+            }
+            
+            const results = await Promise.all(promises);
+            const successCount = results.filter(r => r.success).length;
+            
+            log(`并发渲染: ${successCount}/5 成功`, 
+                successCount === 5 ? 'success' : 'error');
+        }
+
+        // 定期更新性能指标
+        setInterval(updateMetrics, 1000);
+        
+        // 初始日志
+        log('压力测试系统已就绪', 'info');
+        log('注意: 部分测试可能导致浏览器卡顿或崩溃', 'warn');
+    </script>
+</body>
+</html>

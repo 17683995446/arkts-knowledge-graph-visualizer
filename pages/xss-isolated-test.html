@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>XSS隔离测试</title></head>
+<body>
+<div id="test" style="width:400px;height:400px;"></div>
+<script src="../libs/vis-network.min.js"></script>
+<script src="../js/graph.js?v=50"></script>
+<script>
+console.log('Step 1: Creating GraphVisualizer with XSS label...');
+const gv = new GraphVisualizer('test');
+console.log('Step 2: Calling init with <script> label...');
+try {
+    const net = gv.init([{ id: '1', label: '<script>alert("xss")</script>' }], []);
+    console.log('Step 3: init returned', net !== null ? 'non-null' : 'null');
+} catch(e) {
+    console.log('Step 3: init threw', e.message);
+}
+console.log('Step 4: Done. If no alert appeared, XSS is prevented.');
+</script>
+</body>
+</html>

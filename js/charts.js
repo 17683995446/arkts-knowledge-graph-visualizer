@@ -3,19 +3,42 @@
  * Uses D3.js for various chart types
  */
 
+// Bug #77修复: 使用window.KGLog确保跨文件全局可见
+if (typeof window.KGLog === 'undefined') {
+    window.KGLog = {
+        _enabled: true,
+        _prefix: '[KG]',
+        entry(method, msg) { if (this._enabled) console.log(`${this._prefix} ▶ ${method}: ${msg}`); },
+        exit(method, msg) { if (this._enabled) console.log(`${this._prefix} ◀ ${method}: ${msg || 'done'}`); },
+        info(method, msg) { if (this._enabled) console.log(`${this._prefix} ℹ ${method}: ${msg}`); },
+        warn(method, msg) { if (this._enabled) console.warn(`${this._prefix} ⚠ ${method}: ${msg}`); },
+        error(method, msg) { if (this._enabled) console.error(`${this._prefix} ✖ ${method}: ${msg}`); },
+        data(method, msg, data) { if (this._enabled) console.log(`${this._prefix} 📊 ${method}: ${msg}`, data); }
+    };
+}
+// Bug #77修复续: 使用var避免重复声明错误，或直接使用window.KGLog
+var KGLog = window.KGLog;
+
 class ChartManager {
     constructor() {
+        KGLog.entry('constructor', 'creating ChartManager');
         this.charts = {};
+        KGLog.exit('constructor', 'ChartManager created');
     }
 
     /**
      * Create a pie chart for file type distribution
      */
     createPieChart(containerId, data) {
+        KGLog.entry('createPieChart', `containerId=${containerId}, data.length=${data ? data.length : 0}`);
         const container = d3.select(`#${containerId}`);
         const containerNode = container.node();
-        if (!containerNode) { console.warn('Container not found'); return this; }
+        if (!containerNode) { KGLog.warn('createPieChart', `container #${containerId} not found`); console.warn('Container not found'); return this; }
+        // Bug #86修复: 空数据检查
+        if (!data || data.length === 0) { KGLog.warn('createPieChart', 'empty data, skipping'); console.warn('createPieChart: empty data'); return this; }
         container.selectAll('*').remove();
+
+        KGLog.info('createPieChart', `categories=${data.length}`);
 
         let width = containerNode.getBoundingClientRect().width;
         width = Math.max(width, 300);
@@ -115,6 +138,7 @@ class ChartManager {
             .style('font-size', '11px')
             .style('fill', '#94a3b8');
 
+        KGLog.exit('createPieChart', `rendered ${data.length} categories, total=${total}`);
         return this;
     }
 
@@ -122,12 +146,14 @@ class ChartManager {
      * Create a line chart for code trend
      */
     createLineChart(containerId, data) {
+        KGLog.entry('createLineChart', `containerId=${containerId}, data.length=${data ? data.length : 0}`);
         const container = d3.select(`#${containerId}`);
         const containerNode = container.node();
-        if (!containerNode) { console.warn('Container not found'); return this; }
-        if (!data || data.length === 0) { console.warn('createLineChart: empty data'); return this; }
+        if (!containerNode) { KGLog.warn('createLineChart', `container #${containerId} not found`); console.warn('Container not found'); return this; }
+        if (!data || data.length === 0) { KGLog.warn('createLineChart', 'empty data, skipping'); console.warn('createLineChart: empty data'); return this; }
         container.selectAll('*').remove();
         // Bug #31修复: 清理之前可能残留的tooltip
+        // Bug #84修复: 使用唯一class名避免跨图表tooltip冲突
         d3.selectAll('.chart-tooltip').remove();
 
         const margin = { top: 20, right: 30, bottom: 40, left: 60 };
@@ -144,20 +170,36 @@ class ChartManager {
         // Parse dates (avoid mutating original data)
         const parseDate = d3.timeParse('%Y-%m-%d');
         const parsedData = data.map(d => ({ ...d, date: parseDate(d.date) }));
+        // Bug #95修复: 过滤无效日期数据
+        const validData = parsedData.filter(d => d.date !== null);
+        if (validData.length === 0) {
+            KGLog.warn('createLineChart', 'no valid dates found, skipping');
+            console.warn('createLineChart: no valid dates');
+            return this;
+        }
+        KGLog.info('createLineChart', `parsed ${validData.length} valid data points (filtered ${parsedData.length - validData.length} invalid)`);
 
         // Scales
+        // Bug #92修复: 防止单数据点或相同值导致退化domain
+        const minLines = d3.min(validData, d => d.lines);
+        const maxLines = d3.max(validData, d => d.lines);
+        const yDomain = minLines === maxLines
+            ? [minLines - 1, maxLines + 1]
+            : [minLines * 0.95, maxLines * 1.05];
+
         const x = d3.scaleTime()
-            .domain(d3.extent(parsedData, d => d.date))
+            .domain(d3.extent(validData, d => d.date))
             .range([0, width]);
 
         const y = d3.scaleLinear()
-            .domain([d3.min(parsedData, d => d.lines) * 0.95, d3.max(parsedData, d => d.lines) * 1.05])
+            .domain(yDomain)
             .range([height, 0]);
 
-        // Gradient
+        // Gradient - Bug #38修复: 使用容器ID生成唯一gradient ID避免碰撞
+        const gradientId = `line-gradient-${containerId}`;
         const gradient = svg.append('defs')
             .append('linearGradient')
-            .attr('id', 'line-gradient')
+            .attr('id', gradientId)
             .attr('gradientUnits', 'userSpaceOnUse')
             .attr('x1', 0)
             .attr('y1', height)
@@ -182,8 +224,8 @@ class ChartManager {
             .curve(d3.curveMonotoneX);
 
         svg.append('path')
-            .datum(parsedData)
-            .attr('fill', 'url(#line-gradient)')
+            .datum(validData)
+            .attr('fill', `url(#${gradientId})`)
             .attr('d', area);
 
         // Line
@@ -193,7 +235,7 @@ class ChartManager {
             .curve(d3.curveMonotoneX);
 
         const path = svg.append('path')
-            .datum(parsedData)
+            .datum(validData)
             .attr('fill', 'none')
             .attr('stroke', '#2563eb')
             .attr('stroke-width', 2)
@@ -247,7 +289,7 @@ class ChartManager {
             .style('pointer-events', 'none');
 
         svg.selectAll('.dot')
-            .data(parsedData)
+            .data(validData)
             .enter()
             .append('circle')
             .attr('class', 'dot')
@@ -270,6 +312,7 @@ class ChartManager {
                 tooltip.transition().duration(500).style('opacity', 0);
             });
 
+        KGLog.exit('createLineChart', `rendered ${validData.length} data points`);
         return this;
     }
 
@@ -277,10 +320,11 @@ class ChartManager {
      * Create a bar chart for code statistics
      */
     createBarChart(containerId, data, options = {}) {
-        if (!data || data.length === 0) return this;
+        KGLog.entry('createBarChart', `containerId=${containerId}, data.length=${data ? data.length : 0}`);
+        if (!data || data.length === 0) { KGLog.warn('createBarChart', 'empty data, skipping'); return this; }
         const container = d3.select(`#${containerId}`);
         const containerNode = container.node();
-        if (!containerNode) { console.warn('Container not found'); return this; }
+        if (!containerNode) { KGLog.warn('createBarChart', `container #${containerId} not found`); console.warn('Container not found'); return this; }
         container.selectAll('*').remove();
 
         // Bug #31修复: 使用传入的margin选项（如果提供）
@@ -301,8 +345,12 @@ class ChartManager {
             .range([0, width])
             .padding(0.3);
 
+        // Bug #94修复: 防止全零数据导致domain退化为[0,0]
+        const maxValue = d3.max(data, d => d.value) || 0;
+        const yDomain = maxValue === 0 ? [0, 10] : [0, maxValue * 1.1];
+
         const y = d3.scaleLinear()
-            .domain([0, d3.max(data, d => d.value) * 1.1])
+            .domain(yDomain)
             .range([height, 0]);
 
         // Bars
@@ -357,6 +405,7 @@ class ChartManager {
             .delay((d, i) => i * 100 + 400)
             .style('opacity', 1);
 
+        KGLog.exit('createBarChart', `rendered ${data.length} bars`);
         return this;
     }
 
@@ -364,9 +413,12 @@ class ChartManager {
      * Create a treemap for file structure
      */
     createTreemap(containerId, data) {
+        KGLog.entry('createTreemap', `containerId=${containerId}, data keys=${data ? Object.keys(data).join(',') : 'null'}`);
         const container = d3.select(`#${containerId}`);
         const containerNode = container.node();
-        if (!containerNode) { console.warn('Container not found'); return this; }
+        if (!containerNode) { KGLog.warn('createTreemap', `container #${containerId} not found`); console.warn('Container not found'); return this; }
+        // Bug #87修复: 空数据/null检查
+        if (!data) { KGLog.warn('createTreemap', 'null data, skipping'); console.warn('createTreemap: null data'); return this; }
         container.selectAll('*').remove();
 
         // Get container width, fallback to parent width or default
@@ -391,6 +443,8 @@ class ChartManager {
             .padding(2)
             (root);
 
+        KGLog.info('createTreemap', `hierarchy leaves=${root.leaves().length}`);
+
         const color = d3.scaleOrdinal(d3.schemeCategory10);
 
         const leaf = svg.selectAll('g')
@@ -403,8 +457,10 @@ class ChartManager {
             .attr('width', d => d.x1 - d.x0)
             .attr('height', d => d.y1 - d.y0)
             .attr('fill', d => {
-                while (d.depth > 1) d = d.parent;
-                return color(d.data.name);
+                // Bug #37修复: 使用临时变量避免修改D3绑定的数据引用
+                let ancestor = d;
+                while (ancestor.depth > 1) ancestor = ancestor.parent;
+                return color(ancestor.data.name);
             })
             .attr('opacity', 0.8)
             .attr('rx', 2);
@@ -425,6 +481,7 @@ class ChartManager {
             .style('fill', '#94a3b8')
             .style('pointer-events', 'none');
 
+        KGLog.exit('createTreemap', `rendered ${root.leaves().length} leaves`);
         return this;
     }
 
@@ -432,15 +489,21 @@ class ChartManager {
      * Create a force-directed graph
      */
     createForceGraph(containerId, nodes, links, options = {}) {
+        KGLog.entry('createForceGraph', `containerId=${containerId}, nodes=${nodes ? nodes.length : 0}, links=${links ? links.length : 0}`);
         const container = d3.select(`#${containerId}`);
         const containerNode = container.node();
-        if (!containerNode) { console.warn('Container not found'); return this; }
+        if (!containerNode) { KGLog.warn('createForceGraph', `container #${containerId} not found`); console.warn('Container not found'); return this; }
+        // Bug #88修复: 空数据/null检查
+        if (!nodes || !Array.isArray(nodes) || nodes.length === 0) { KGLog.warn('createForceGraph', 'invalid or empty nodes data'); console.warn('createForceGraph: invalid nodes'); return this; }
+        if (!links || !Array.isArray(links)) { KGLog.warn('createForceGraph', 'invalid links data'); console.warn('createForceGraph: invalid links'); return this; }
         container.selectAll('*').remove();
 
         // Deep copy nodes to avoid mutating original data
         const simNodes = JSON.parse(JSON.stringify(nodes));
         // Convert link format for d3 compatibility
         const d3Links = links.map(l => ({ source: l.from || l.source, target: l.to || l.target }));
+
+        KGLog.info('createForceGraph', `converted ${d3Links.length} links for D3`);
 
         const width = options.width || containerNode.getBoundingClientRect().width;
         const height = options.height || 500;
@@ -524,10 +587,14 @@ class ChartManager {
             d.fy = null;
         }
 
+        KGLog.exit('createForceGraph', `simulation started with ${simNodes.length} nodes, ${d3Links.length} links`);
         return { svg, simulation, node, link, destroy: function() {
             // Bug #31修复: 提供destroy方法停止simulation并清理DOM
+            // Bug #81修复: 正确移除D3 zoom事件
+            KGLog.info('createForceGraph.destroy', 'stopping simulation and cleaning up');
             simulation.stop();
-            svg.on('.zoom', null);
+            svg.on('zoom', null);
+            svg.selectAll('*').remove();
             svg.remove();
         }};
     }
@@ -536,13 +603,27 @@ class ChartManager {
      * Create a chord diagram for module dependencies
      */
     createChordDiagram(containerId, matrix, labels) {
+        KGLog.entry('createChordDiagram', `containerId=${containerId}, matrix=${matrix ? matrix.length + 'x' + (matrix[0] ? matrix[0].length : 0) : 'null'}, labels=${labels ? labels.length : 0}`);
         const container = d3.select(`#${containerId}`);
         const containerNode = container.node();
-        if (!containerNode) { console.warn('Container not found'); return this; }
+        if (!containerNode) { KGLog.warn('createChordDiagram', `container #${containerId} not found`); console.warn('Container not found'); return this; }
+        // Bug #75修复: 检查matrix是否为有效的二维数组
+        if (!matrix || !Array.isArray(matrix) || matrix.length === 0 || !Array.isArray(matrix[0])) {
+            KGLog.warn('createChordDiagram', 'invalid matrix data');
+            console.warn('createChordDiagram: invalid matrix data');
+            return this;
+        }
+        // Bug #75修复: labels为可选参数，提供默认值
+        if (!labels) {
+            labels = matrix.map((_, i) => 'Group ' + (i + 1));
+            KGLog.info('createChordDiagram', `generated ${labels.length} default labels`);
+        }
         container.selectAll('*').remove();
 
-        const width = 500;
-        const height = 500;
+        // Bug #63修复: 使用容器实际尺寸替代硬编码500x500
+        let width = containerNode.getBoundingClientRect().width;
+        width = Math.max(width, 300);
+        const height = Math.max(width, 300); // 保持正方形
         const outerRadius = Math.min(width, height) / 2 - 60;
         const innerRadius = outerRadius - 20;
 
@@ -604,13 +685,16 @@ class ChartManager {
             .style('font-size', '10px')
             .style('fill', '#94a3b8');
 
+        KGLog.exit('createChordDiagram', `rendered ${labels.length} groups`);
         return this;
     }
 
     // Bug #31修复: 添加destroy方法清理所有残留的tooltip和chart引用
     destroy() {
+        KGLog.entry('destroy', 'cleaning up all charts and tooltips');
         d3.selectAll('.chart-tooltip').remove();
         this.charts = {};
+        KGLog.exit('destroy', 'cleanup complete');
     }
 }
 

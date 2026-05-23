@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>最小功能测试</title></head>
+<body>
+<div id="test" style="width:400px;height:400px;"></div>
+<div id="test2" style="width:400px;height:400px;"></div>
+<script src="../libs/vis-network.min.js"></script>
+<script src="../js/graph.js?v=50"></script>
+<script>
+console.log('=== 最小功能测试开始 ===');
+
+// 测试1: GraphVisualizer基本功能
+const gv = new GraphVisualizer('test');
+const net = gv.init([{ id: '1', label: 'NodeA' }, { id: '2', label: 'NodeB' }], [{ from: '1', to: '2' }]);
+console.log('GraphVisualizer init:', net !== null ? 'PASS' : 'FAIL');
+
+// 测试2: null安全
+gv.focusNode(null);
+console.log('focusNode(null): PASS');
+
+gv.highlightConnected(null);
+console.log('highlightConnected(null): PASS');
+
+gv.searchNodes('');
+console.log('searchNodes empty: PASS');
+
+gv.resetHighlight();
+console.log('resetHighlight: PASS');
+
+// 测试3: destroy
+gv.destroy();
+console.log('destroy: PASS');
+
+// 测试4: escapeHtml
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+const escaped = escapeHtml('<b>bold</b>');
+console.log('escapeHtml:', escaped === '&lt;b&gt;bold&lt;/b&gt;' ? 'PASS' : 'FAIL got: ' + escaped);
+
+console.log('=== 所有测试完成 ===');
+</script>
+</body>
+</html>

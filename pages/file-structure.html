@@ -414,8 +414,8 @@
     </div>
 
     <script src="../js/data.js"></script>
-    <script src="../js/graph.js"></script>
-    <script src="../js/charts.js"></script>
+    <script src="../js/graph.js?v=50"></script>
+    <script src="../js/charts.js?v=50"></script>
     <script>
         let treeVisualizer = null;
         let sunburstVisualizer = null;
@@ -515,13 +515,26 @@
             }
         }
 
-        // 处理窗口大小变化
-        window.addEventListener('resize', () => {
+        // Bug #39修复: 添加防抖函数
+        function debounce(fn, delay) {
+            let timer = null;
+            return function(...args) {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn.apply(this, args), delay);
+            };
+        }
+
+        // 处理窗口大小变化（带防抖）
+        window.addEventListener('resize', debounce(() => {
             if (treeVisualizer && currentView === 'tree') {
-                treeVisualizer.options.width = document.getElementById('fileTreeView').offsetWidth;
-                treeVisualizer.init(KGData.fileStructure);
+                // Bug #55修复: 防止offsetWidth为0
+                const w = document.getElementById('fileTreeView').offsetWidth;
+                if (w > 0) {
+                    treeVisualizer.options.width = w;
+                    treeVisualizer.init(KGData.fileStructure);
+                }
             }
-        });
+        }, 250));
     </script>
 </body>
 </html>

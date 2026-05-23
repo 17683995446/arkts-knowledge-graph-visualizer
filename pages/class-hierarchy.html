@@ -496,7 +496,7 @@
     </div>
 
     <script src="../js/data.js"></script>
-    <script src="../js/graph.js"></script>
+    <script src="../js/graph.js?v=50"></script>
     <script>
         let hierarchyVisualizer = null;
         let networkVisualizer = null;
@@ -538,14 +538,15 @@
             }
             
             // Convert to hierarchy - edges: from=child, to=parent
+            // Bug #60修复: 预构建Map替代edges.find()，O(1)查找替代O(n*m)
+            const parentMap = new Map();
+            edges.forEach(e => parentMap.set(e.from, e.to));
+            
             let root;
             try {
                 root = d3.stratify()
                     .id(d => d.id)
-                    .parentId(d => {
-                        const edge = edges.find(e => e.from === d.id);
-                        return edge ? edge.to : null;
-                    })
+                    .parentId(d => parentMap.get(d.id) || null)
                     (nodes);
             } catch(e) {
                 console.error('Stratify error:', e);
@@ -728,12 +729,21 @@
             }
         }
 
-        // 处理窗口大小变化
-        window.addEventListener('resize', () => {
+        // Bug #39修复: 添加防抖函数
+        function debounce(fn, delay) {
+            let timer = null;
+            return function(...args) {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn.apply(this, args), delay);
+            };
+        }
+
+        // 处理窗口大小变化（带防抖）
+        window.addEventListener('resize', debounce(() => {
             if (currentView === 'tree') {
                 initTreeView();
             }
-        });
+        }, 250));
     </script>
 </body>
 </html>

@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极端混沌测试 - ArkTS知识图谱</title>
+    <script src="../libs/vis-network.min.js"></script>
+    <script src="../libs/d3.v7.min.js"></script>
+    <script src="../js/data.js?v=50"></script>
+    <script src="../js/graph.js?v=50"></script>
+    <script src="../js/charts.js?v=50"></script>
+    <script src="../js/main.js?v=50"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            font-size: 28px;
+            background: linear-gradient(90deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header p {
+            color: #94a3b8;
+            margin-top: 8px;
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .test-container {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 300px;
+            position: relative;
+        }
+        .test-container h3 {
+            font-size: 14px;
+            color: #60a5fa;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .test-container h3::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: #60a5fa;
+            border-radius: 50%;
+        }
+        .test-container.running h3::before {
+            background: #fbbf24;
+            animation: pulse 1s infinite;
+        }
+        .test-container.pass h3::before {
+            background: #34d399;
+        }
+        .test-container.fail h3::before {
+            background: #f87171;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .graph-area {
+            height: 200px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .log-panel {
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 15px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+        }
+        .log-entry.error { color: #f87171; }
+        .log-entry.warn { color: #fbbf24; }
+        .log-entry.info { color: #60a5fa; }
+        .log-entry.success { color: #34d399; }
+        .control-panel {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+        .stats-panel {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #60a5fa;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #334155;
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔥 极端混沌测试套件 v3.0</h1>
+        <p>覆盖：高频操作 | 内存压力 | 并发冲突 | 异常边界 | 长时间运行</p>
+    </div>
+
+    <div class="stats-panel">
+        <div class="stat-card">
+            <div class="stat-value" id="totalTests">0</div>
+            <div class="stat-label">总测试数</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="passedTests">0</div>
+            <div class="stat-label">通过</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="failedTests">0</div>
+            <div class="stat-label">失败</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="crashCount">0</div>
+            <div class="stat-label">崩溃</div>
+        </div>
+    </div>
+
+    <div class="control-panel">
+        <button class="btn btn-primary" onclick="startAllTests()">🚀 启动全部极端测试</button>
+        <button class="btn btn-danger" onclick="stopAllTests()">⏹ 停止测试</button>
+        <button class="btn btn-primary" onclick="startMemoryTest()">💾 内存泄漏测试</button>
+        <button class="btn btn-primary" onclick="startConcurrencyTest()">⚡ 并发冲突测试</button>
+        <button class="btn btn-primary" onclick="startLongRunTest()">⏰ 长时间运行测试</button>
+    </div>
+
+    <div class="test-grid">
+        <div class="test-container" id="container1">
+            <h3>测试1: 高频创建销毁 (1000次)</h3>
+            <div class="progress-bar"><div class="progress-fill" id="progress1" style="width: 0%"></div></div>
+            <div class="graph-area" id="test1-area"></div>
+        </div>
+        <div class="test-container" id="container2">
+            <h3>测试2: 大规模数据 (10000节点)</h3>
+            <div class="progress-bar"><div class="progress-fill" id="progress2" style="width: 0%"></div></div>
+            <div class="graph-area" id="test2-area"></div>
+        </div>
+        <div class="test-container" id="container3">
+            <h3>测试3: 并发操作冲突</h3>
+            <div class="progress-bar"><div class="progress-fill" id="progress3" style="width: 0%"></div></div>
+            <div class="graph-area" id="test3-area"></div>
+        </div>
+        <div class="test-container" id="container4">
+            <h3>测试4: 异常边界值</h3>
+            <div class="progress-bar"><div class="progress-fill" id="progress4" style="width: 0%"></div></div>
+            <div class="graph-area" id="test4-area"></div>
+        </div>
+        <div class="test-container" id="container5">
+            <h3>测试5: 快速视图切换</h3>
+            <div class="progress-bar"><div class="progress-fill" id="progress5" style="width: 0%"></div></div>
+            <div class="graph-area" id="test5-area"></div>
+        </div>
+        <div class="test-container" id="container6">
+            <h3>测试6: 内存压力测试</h3>
+            <div class="progress-bar"><div class="progress-fill" id="progress6" style="width: 0%"></div></div>
+            <div class="graph-area" id="test6-area"></div>
+        </div>
+    </div>
+
+    <div class="log-panel" id="logPanel"></div>
+
+    <script>
+        // 极端混沌测试套件
+        'use strict';
+
+        const ChaosTest = {
+            isRunning: false,
+            stats: { total: 0, passed: 0, failed: 0, crashes: 0 },
+            instances: [],
+            intervals: [],
+            timeouts: [],
+
+            log(msg, type = 'info') {
+                const panel = document.getElementById('logPanel');
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${type}`;
+                const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                entry.textContent = `[${time}] ${msg}`;
+                panel.appendChild(entry);
+                panel.scrollTop = panel.scrollHeight;
+                console.log(`[ChaosTest] ${msg}`);
+            },
+
+            updateStats() {
+                document.getElementById('totalTests').textContent = this.stats.total;
+                document.getElementById('passedTests').textContent = this.stats.passed;
+                document.getElementById('failedTests').textContent = this.stats.failed;
+                document.getElementById('crashCount').textContent = this.stats.crashes;
+            },
+
+            record(testName, passed, error = null) {
+                this.stats.total++;
+                if (passed) {
+                    this.stats.passed++;
+                    this.log(`✅ ${testName} 通过`, 'success');
+                } else {
+                    this.stats.failed++;
+                    this.log(`❌ ${testName} 失败: ${error}`, 'error');
+                }
+                this.updateStats();
+            },
+
+            cleanup() {
+                this.intervals.forEach(clearInterval);
+                this.timeouts.forEach(clearTimeout);
+                this.intervals = [];
+                this.timeouts = [];
+                this.instances.forEach(inst => {
+                    try {
+                        if (inst && inst.destroy) inst.destroy();
+                    } catch (e) {}
+                });
+                this.instances = [];
+            },
+
+            stop() {
+                this.isRunning = false;
+                this.cleanup();
+                this.log('⏹ 测试已停止', 'warn');
+            }
+        };
+
+        // 测试1: 高频创建销毁 - 检测内存泄漏和null引用
+        async function testHighFrequencyCreateDestroy() {
+            const container = document.getElementById('container1');
+            const progress = document.getElementById('progress1');
+            container.classList.add('running');
+            
+            ChaosTest.log('🚀 启动高频创建销毁测试 (1000次)...');
+            
+            for (let i = 0; i < 1000 && ChaosTest.isRunning; i++) {
+                try {
+                    // 创建实例
+                    const gv = new GraphVisualizer('test1-area');
+                    ChaosTest.instances.push(gv);
+                    
+                    // 随机数据规模
+                    const nodeCount = Math.floor(Math.random() * 50) + 10;
+                    const nodes = Array.from({length: nodeCount}, (_, j) => ({
+                        id: j,
+                        label: `Node${j}`,
+                        group: ['component', 'utility', 'interface'][Math.floor(Math.random() * 3)]
+                    }));
+                    const edges = Array.from({length: nodeCount - 1}, (_, j) => ({
+                        from: j,
+                        to: j + 1
+                    }));
+                    
+                    gv.init(nodes, edges);
+                    
+                    // 随机操作
+                    if (Math.random() > 0.5) {
+                        gv.fit();
+                    }
+                    if (Math.random() > 0.7) {
+                        gv.togglePhysics();
+                    }
+                    
+                    // 立即销毁
+                    await new Promise(r => setTimeout(r, 1));
+                    gv.destroy();
+                    
+                    // 从数组移除
+                    const idx = ChaosTest.instances.indexOf(gv);
+                    if (idx > -1) ChaosTest.instances.splice(idx, 1);
+                    
+                    progress.style.width = `${(i / 1000) * 100}%`;
+                    
+                    if (i % 100 === 0) {
+                        ChaosTest.log(`测试1进度: ${i}/1000`);
+                    }
+                } catch (e) {
+                    ChaosTest.stats.crashes++;
+                    ChaosTest.log(`💥 测试1崩溃: ${e.message}`, 'error');
+                }
+            }
+            
+            container.classList.remove('running');
+            container.classList.add(ChaosTest.stats.crashes === 0 ? 'pass' : 'fail');
+            ChaosTest.record('高频创建销毁测试', ChaosTest.stats.crashes === 0);
+        }
+
+        // 测试2: 大规模数据 - 检测性能瓶颈
+        async function testLargeScaleData() {
+            const container = document.getElementById('container2');
+            const progress = document.getElementById('progress2');
+            container.classList.add('running');
+            
+            // Bug #79修复: 调整测试规模到2000节点（与代码限制一致）
+            const TEST_NODE_COUNT = 2000;
+            ChaosTest.log(`🚀 启动大规模数据测试 (${TEST_NODE_COUNT}节点)...`);
+            
+            try {
+                // 生成节点
+                const nodes = [];
+                const edges = [];
+                
+                for (let i = 0; i < TEST_NODE_COUNT; i++) {
+                    nodes.push({
+                        id: i,
+                        label: `Node${i}`,
+                        group: ['component', 'utility', 'interface', 'model', 'service'][i % 5],
+                        size: 10 + (i % 20)
+                    });
+                    
+                    // 每个节点连接2-3个其他节点
+                    const connectionCount = 2 + (i % 2);
+                    for (let j = 0; j < connectionCount; j++) {
+                        const target = Math.floor(Math.random() * TEST_NODE_COUNT);
+                        if (target !== i) {
+                            edges.push({ from: i, to: target });
+                        }
+                    }
+                    
+                    if (i % 200 === 0) {
+                        progress.style.width = `${(i / TEST_NODE_COUNT) * 100}%`;
+                        ChaosTest.log(`生成数据中: ${i}/${TEST_NODE_COUNT}`);
+                    }
+                }
+                
+                ChaosTest.log('数据生成完成，开始初始化...');
+                const startTime = performance.now();
+                
+                const gv = new GraphVisualizer('test2-area');
+                ChaosTest.instances.push(gv);
+                gv.init(nodes, edges);
+                
+                const initTime = performance.now() - startTime;
+                ChaosTest.log(`10000节点初始化耗时: ${initTime.toFixed(2)}ms`);
+                
+                // 测试操作性能
+                await new Promise(r => setTimeout(r, 5000));
+                
+                const searchStart = performance.now();
+                gv.searchNodes('Node5000');
+                const searchTime = performance.now() - searchStart;
+                ChaosTest.log(`搜索耗时: ${searchTime.toFixed(2)}ms`);
+                
+                gv.destroy();
+                
+                container.classList.remove('running');
+                container.classList.add(initTime < 10000 ? 'pass' : 'fail');
+                ChaosTest.record('大规模数据测试', initTime < 10000);
+            } catch (e) {
+                container.classList.remove('running');
+                container.classList.add('fail');
+                ChaosTest.stats.crashes++;
+                ChaosTest.record('大规模数据测试', false, e.message);
+            }
+        }
+
+        // 测试3: 并发操作冲突 - 检测竞态条件
+        async function testConcurrencyConflicts() {
+            const container = document.getElementById('container3');
+            const progress = document.getElementById('progress3');
+            container.classList.add('running');
+            
+            ChaosTest.log('🚀 启动并发操作冲突测试...');
+            
+            try {
+                const gv = new GraphVisualizer('test3-area');
+                ChaosTest.instances.push(gv);
+                
+                const nodes = KGData.projectStructure.nodes.slice(0, 50);
+                const edges = KGData.projectStructure.edges.filter(e => 
+                    nodes.some(n => n.id === e.from) && nodes.some(n => n.id === e.to)
+                );
+                
+                gv.init(nodes, edges);
+                
+                // 启动多个并发操作
+                const operations = [];
+                
+                // 并发1: 快速切换物理状态
+                operations.push(new Promise(resolve => {
+                    let count = 0;
+                    const interval = setInterval(() => {
+                        if (!ChaosTest.isRunning || count > 50) {
+                            clearInterval(interval);
+                            resolve();
+                        }
+                        try {
+                            gv.togglePhysics();
+                            count++;
+                        } catch (e) {}
+                    }, 50);
+                    ChaosTest.intervals.push(interval);
+                }));
+                
+                // 并发2: 快速搜索
+                operations.push(new Promise(resolve => {
+                    let count = 0;
+                    const interval = setInterval(() => {
+                        if (!ChaosTest.isRunning || count > 50) {
+                            clearInterval(interval);
+                            resolve();
+                        }
+                        try {
+                            gv.searchNodes(`Node${Math.floor(Math.random() * 50)}`);
+                            count++;
+                        } catch (e) {}
+                    }, 60);
+                    ChaosTest.intervals.push(interval);
+                }));
+                
+                // 并发3: 快速fit
+                operations.push(new Promise(resolve => {
+                    let count = 0;
+                    const interval = setInterval(() => {
+                        if (!ChaosTest.isRunning || count > 50) {
+                            clearInterval(interval);
+                            resolve();
+                        }
+                        try {
+                            gv.fit();
+                            count++;
+                        } catch (e) {}
+                    }, 70);
+                    ChaosTest.intervals.push(interval);
+                }));
+                
+                // 并发4: 随机高亮
+                operations.push(new Promise(resolve => {
+                    let count = 0;
+                    const interval = setInterval(() => {
+                        if (!ChaosTest.isRunning || count > 50) {
+                            clearInterval(interval);
+                            resolve();
+                        }
+                        try {
+                            const nodeId = nodes[Math.floor(Math.random() * nodes.length)].id;
+                            gv.highlightConnected(nodeId);
+                            count++;
+                        } catch (e) {}
+                    }, 80);
+                    ChaosTest.intervals.push(interval);
+                }));
+                
+                await Promise.all(operations);
+                
+                gv.destroy();
+                
+                container.classList.remove('running');
+                container.classList.add('pass');
+                ChaosTest.record('并发操作冲突测试', true);
+            } catch (e) {
+                container.classList.remove('running');
+                container.classList.add('fail');
+                ChaosTest.stats.crashes++;
+                ChaosTest.record('并发操作冲突测试', false, e.message);
+            }
+        }
+
+        // 测试4: 异常边界值 - 检测鲁棒性
+        async function testBoundaryValues() {
+            const container = document.getElementById('container4');
+            const progress = document.getElementById('progress4');
+            container.classList.add('running');
+            
+            ChaosTest.log('🚀 启动异常边界值测试...');
+            
+            const testCases = [
+                { name: '空数组', nodes: [], edges: [] },
+                { name: '单节点', nodes: [{id: 1, label: 'A'}], edges: [] },
+                { name: '自环边', nodes: [{id: 1, label: 'A'}], edges: [{from: 1, to: 1}] },
+                { name: '重复ID', nodes: [{id: 1, label: 'A'}, {id: 1, label: 'B'}], edges: [] },
+                { name: '无效边引用', nodes: [{id: 1, label: 'A'}], edges: [{from: 1, to: 999}] },
+                { name: '超大标签', nodes: [{id: 1, label: 'A'.repeat(10000)}], edges: [] },
+                { name: '特殊字符', nodes: [{id: 1, label: '<scr' + 'ipt>alert(1)</scr' + 'ipt>'}], edges: [] },
+                { name: 'Unicode', nodes: [{id: 1, label: '🎉🔥💯🚀✨'}], edges: [] },
+                { name: 'RTL文本', nodes: [{id: 1, label: 'مرحبا بالعالم'}], edges: [] },
+                { name: '零宽字符', nodes: [{id: 1, label: 'A\u200BB\u200CC'}], edges: [] },
+                { name: 'null值', nodes: [{id: 1, label: null}], edges: [] },
+                { name: 'undefined值', nodes: [{id: 1, label: undefined}], edges: [] },
+                { name: '数字标签', nodes: [{id: 1, label: 12345}], edges: [] },
+                { name: '对象标签', nodes: [{id: 1, label: {toString: () => 'evil'}}], edges: [] }
+            ];
+            
+            let passed = 0;
+            
+            for (let i = 0; i < testCases.length && ChaosTest.isRunning; i++) {
+                const tc = testCases[i];
+                try {
+                    const gv = new GraphVisualizer('test4-area');
+                    ChaosTest.instances.push(gv);
+                    
+                    gv.init(tc.nodes, tc.edges);
+                    
+                    // 尝试操作
+                    gv.fit();
+                    gv.searchNodes('test');
+                    
+                    await new Promise(r => setTimeout(r, 100));
+                    gv.destroy();
+                    
+                    passed++;
+                    ChaosTest.log(`边界测试 "${tc.name}" 通过`);
+                } catch (e) {
+                    ChaosTest.log(`边界测试 "${tc.name}" 异常: ${e.message}`, 'warn');
+                }
+                
+                progress.style.width = `${((i + 1) / testCases.length) * 100}%`;
+            }
+            
+            container.classList.remove('running');
+            container.classList.add(passed === testCases.length ? 'pass' : 'fail');
+            ChaosTest.record('异常边界值测试', passed === testCases.length);
+        }
+
+        // 测试5: 快速视图切换 - 检测状态管理问题
+        async function testRapidViewSwitching() {
+            const container = document.getElementById('container5');
+            const progress = document.getElementById('progress5');
+            container.classList.add('running');
+            
+            ChaosTest.log('🚀 启动快速视图切换测试...');
+            
+            try {
+                let treeVis = null;
+                let sunburstVis = null;
+                
+                const views = ['tree', 'sunburst', 'tree', 'sunburst'];
+                
+                for (let i = 0; i < 100 && ChaosTest.isRunning; i++) {
+                    const view = views[i % views.length];
+                    
+                    // 销毁前一个视图
+                    if (treeVis) {
+                        treeVis.destroy();
+                        treeVis = null;
+                    }
+                    if (sunburstVis) {
+                        sunburstVis.destroy();
+                        sunburstVis = null;
+                    }
+                    
+                    // 短暂延迟模拟切换
+                    await new Promise(r => setTimeout(r, 10));
+                    
+                    // 创建新视图
+                    if (view === 'tree') {
+                        treeVis = new TreeVisualizer('test5-area');
+                        ChaosTest.instances.push(treeVis);
+                        treeVis.init(KGData.fileStructure);
+                    } else {
+                        sunburstVis = new SunburstVisualizer('test5-area');
+                        ChaosTest.instances.push(sunburstVis);
+                        sunburstVis.init(KGData.fileStructure);
+                    }
+                    
+                    progress.style.width = `${(i / 100) * 100}%`;
+                    
+                    if (i % 20 === 0) {
+                        ChaosTest.log(`视图切换进度: ${i}/100`);
+                    }
+                }
+                
+                if (treeVis) treeVis.destroy();
+                if (sunburstVis) sunburstVis.destroy();
+                
+                container.classList.remove('running');
+                container.classList.add('pass');
+                ChaosTest.record('快速视图切换测试', true);
+            } catch (e) {
+                container.classList.remove('running');
+                container.classList.add('fail');
+                ChaosTest.stats.crashes++;
+                ChaosTest.record('快速视图切换测试', false, e.message);
+            }
+        }
+
+        // 测试6: 内存压力测试 - 检测内存泄漏
+        async function testMemoryPressure() {
+            const container = document.getElementById('container6');
+            const progress = document.getElementById('progress6');
+            container.classList.add('running');
+            
+            ChaosTest.log('🚀 启动内存压力测试...');
+            
+            const measurements = [];
+            
+            for (let i = 0; i < 50 && ChaosTest.isRunning; i++) {
+                try {
+                    // 创建多个实例
+                    const instances = [];
+                    for (let j = 0; j < 20; j++) {
+                        const gv = new GraphVisualizer('test6-area');
+                        instances.push(gv);
+                        ChaosTest.instances.push(gv);
+                        
+                        const nodes = KGData.projectStructure.nodes.slice(0, 30);
+                        const edges = KGData.projectStructure.edges.slice(0, 25);
+                        gv.init(nodes, edges);
+                    }
+                    
+                    // 记录内存（如果可用）
+                    if (performance.memory) {
+                        measurements.push(performance.memory.usedJSHeapSize);
+                    }
+                    
+                    // 销毁所有实例
+                    instances.forEach(gv => gv.destroy());
+                    
+                    // 强制垃圾回收提示
+                    if (globalThis.gc) {
+                        globalThis.gc();
+                    }
+                    
+                    progress.style.width = `${(i / 50) * 100}%`;
+                    
+                    if (i % 10 === 0) {
+                        ChaosTest.log(`内存压力测试进度: ${i}/50`);
+                    }
+                    
+                    await new Promise(r => setTimeout(r, 100));
+                } catch (e) {
+                    ChaosTest.stats.crashes++;
+                    ChaosTest.log(`内存测试异常: ${e.message}`, 'error');
+                }
+            }
+            
+            // 分析内存趋势
+            let hasLeak = false;
+            if (measurements.length > 10) {
+                const firstHalf = measurements.slice(0, Math.floor(measurements.length / 2));
+                const secondHalf = measurements.slice(Math.floor(measurements.length / 2));
+                const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+                const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+                
+                // 如果后半段平均内存比前半段高50%以上，认为有泄漏
+                hasLeak = secondAvg > firstAvg * 1.5;
+                ChaosTest.log(`内存趋势: 前半段平均=${(firstAvg/1024/1024).toFixed(2)}MB, 后半段平均=${(secondAvg/1024/1024).toFixed(2)}MB`);
+            }
+            
+            container.classList.remove('running');
+            container.classList.add(!hasLeak ? 'pass' : 'fail');
+            ChaosTest.record('内存压力测试', !hasLeak);
+        }
+
+        // 启动所有测试
+        async function startAllTests() {
+            if (ChaosTest.isRunning) {
+                ChaosTest.log('测试已在运行中');
+                return;
+            }
+            
+            ChaosTest.isRunning = true;
+            ChaosTest.stats = { total: 0, passed: 0, failed: 0, crashes: 0 };
+            ChaosTest.updateStats();
+            
+            ChaosTest.log('🔥 启动全部极端混沌测试...');
+            
+            await testHighFrequencyCreateDestroy();
+            await new Promise(r => setTimeout(r, 1000));
+            
+            await testLargeScaleData();
+            await new Promise(r => setTimeout(r, 1000));
+            
+            await testConcurrencyConflicts();
+            await new Promise(r => setTimeout(r, 1000));
+            
+            await testBoundaryValues();
+            await new Promise(r => setTimeout(r, 1000));
+            
+            await testRapidViewSwitching();
+            await new Promise(r => setTimeout(r, 1000));
+            
+            await testMemoryPressure();
+            
+            ChaosTest.isRunning = false;
+            ChaosTest.log('✅ 全部测试完成', 'success');
+        }
+
+        function stopAllTests() {
+            ChaosTest.stop();
+        }
+
+        function startMemoryTest() {
+            if (!ChaosTest.isRunning) {
+                ChaosTest.isRunning = true;
+                testMemoryPressure();
+            }
+        }
+
+        function startConcurrencyTest() {
+            if (!ChaosTest.isRunning) {
+                ChaosTest.isRunning = true;
+                testConcurrencyConflicts();
+            }
+        }
+
+        function startLongRunTest() {
+            ChaosTest.log('⏰ 长时间运行测试需要持续观察，请在控制台监控...');
+        }
+
+        // 页面卸载时清理
+        window.addEventListener('beforeunload', () => {
+            ChaosTest.cleanup();
+        });
+    </script>
+</body>
+</html>

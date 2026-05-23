@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>阶段3-7综合测试 - ArkTS知识图谱</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="../js/graph.js?v=98"></script>
+    <script src="../js/charts.js?v=98"></script>
+    <script src="../js/data.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'SF Mono',Consolas,monospace;background:#0a0e1a;color:#c9d1d9;padding:16px}
+        h1{text-align:center;color:#58a6ff;font-size:20px;margin-bottom:4px}
+        .sub{text-align:center;color:#8b949e;font-size:12px;margin-bottom:16px}
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:1200px;margin:0 auto}
+        .card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px}
+        .card h3{color:#58a6ff;font-size:12px;margin-bottom:8px}
+        .card h3 .t{font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px}
+        .t-h{background:#da3633;color:#fff}.t-m{background:#d29922;color:#0a0e1a}.t-l{background:#238636;color:#fff}
+        .area{height:160px;background:#0d1117;border-radius:6px;margin-bottom:8px;overflow:hidden}
+        .btn{background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit;margin:2px}
+        .btn:hover{background:#30363d;border-color:#58a6ff}
+        .btn-r{background:#238636;border-color:#2ea043;color:#fff}
+        .log{background:#0d1117;border:1px solid #21262d;border-radius:4px;padding:6px;font-size:10px;max-height:100px;overflow-y:auto;margin-top:6px;line-height:1.5}
+        .log .p{color:#3fb950}.log .f{color:#f85149}.log .i{color:#58a6ff}.log .w{color:#d29922}
+        .sum{text-align:center;margin:16px 0;padding:12px;background:#161b22;border:1px solid #30363d;border-radius:8px}
+        .sum .s{display:inline-block;margin:0 14px}
+        .sum .n{font-size:24px;font-weight:bold}
+        .sum .l{font-size:10px;color:#8b949e}
+        .np{color:#3fb950}.nf{color:#f85149}.nt{color:#58a6ff}
+    </style>
+</head>
+<body>
+<h1>🔬 阶段3-7 综合深度测试</h1>
+<p class="sub">跨页面集成·接口遍历·业务闭环·数据一致性·长时间稳定性 | 16组测试</p>
+<div class="sum" id="sum">
+    <span class="s"><span class="n nt" id="sT">0</span><br><span class="l">总测试</span></span>
+    <span class="s"><span class="n np" id="sP">0</span><br><span class="l">通过</span></span>
+    <span class="s"><span class="n nf" id="sF">0</span><br><span class="l">失败</span></span>
+</div>
+<div style="text-align:center;margin-bottom:12px">
+    <button class="btn btn-r" onclick="runAll()">▶ 运行全部16组测试</button>
+    <button class="btn" onclick="clr()">🗑 清除</button>
+</div>
+<div class="grid">
+    <!-- 阶段3: 跨页面集成 -->
+    <div class="card"><h3>🔗 T1: 子页面GraphVisualizer无showNodeDetails</h3><div id="a1" class="area"></div><button class="btn" onclick="t1()">运行</button><div id="l1" class="log"></div></div>
+    <div class="card"><h3>🔗 T2: 多实例GraphVisualizer隔离性</h3><div id="a2" class="area"></div><button class="btn" onclick="t2()">运行</button><div id="l2" class="log"></div></div>
+    <!-- 阶段4: 接口全量遍历 -->
+    <div class="card"><h3>📋 T3: GraphVisualizer全API遍历</h3><div id="a3" class="area"></div><button class="btn" onclick="t3()">运行</button><div id="l3" class="log"></div></div>
+    <div class="card"><h3>📋 T4: ChartManager全API遍历</h3><div id="a4" class="area"></div><button class="btn" onclick="t4()">运行</button><div id="l4" class="log"></div></div>
+    <div class="card"><h3>📋 T5: TreeVisualizer全API遍历</h3><div id="a5" class="area"></div><button class="btn" onclick="t5()">运行</button><div id="l5" class="log"></div></div>
+    <div class="card"><h3>📋 T6: SunburstVisualizer全API遍历</h3><div id="a6" class="area"></div><button class="btn" onclick="t6()">运行</button><div id="l6" class="log"></div></div>
+    <!-- 阶段5: 业务场景闭环 -->
+    <div class="card"><h3>🔄 T7: 完整用户操作链路</h3><div id="a7" class="area"></div><button class="btn" onclick="t7()">运行</button><div id="l7" class="log"></div></div>
+    <div class="card"><h3>🔄 T8: 搜索→高亮→重置闭环</h3><div id="a8" class="area"></div><button class="btn" onclick="t8()">运行</button><div id="l8" class="log"></div></div>
+    <!-- 阶段6: 数据一致性 -->
+    <div class="card"><h3>📊 T9: 节点增删后数据同步</h3><div id="a9" class="area"></div><button class="btn" onclick="t9()">运行</button><div id="l9" class="log"></div></div>
+    <div class="card"><h3>📊 T10: searchNodes结果一致性</h3><div id="a10" class="area"></div><button class="btn" onclick="t10()">运行</button><div id="l10" class="log"></div></div>
+    <div class="card"><h3>📊 T11: highlightConnected后resetHighlight</h3><div id="a11" class="area"></div><button class="btn" onclick="t11()">运行</button><div id="l11" class="log"></div></div>
+    <!-- 阶段7: 长时间稳定性 -->
+    <div class="card"><h3>⏰ T12: 1000次创建销毁循环</h3><div id="a12" class="area"></div><button class="btn" onclick="t12()">运行</button><div id="l12" class="log"></div></div>
+    <div class="card"><h3>⏰ T13: DOM节点计数监控</h3><div id="a13" class="area"></div><button class="btn" onclick="t13()">运行</button><div id="l13" class="log"></div></div>
+    <div class="card"><h3>💀 T14: BarChart全零数据 <span class="t t-h">#94</span></h3><div id="a14" class="area"></div><button class="btn" onclick="t14()">运行</button><div id="l14" class="log"></div></div>
+    <div class="card"><h3>💀 T15: LineChart无效日期 <span class="t t-h">#95</span></h3><div id="a15" class="area"></div><button class="btn" onclick="t15()">运行</button><div id="l15" class="log"></div></div>
+    <div class="card"><h3>💀 T16: 双重转义修复验证 <span class="t t-m">#93</span></h3><div id="a16" class="area"></div><button class="btn" onclick="t16()">运行</button><div id="l16" class="log"></div></div>
+</div>
+<script>
+const TF={t:0,p:0,f:0,
+    log(i,m,c='i'){const e=document.getElementById('l'+i);if(e)e.innerHTML+=`<div class="${c}">${m}</div>`},
+    up(){document.getElementById('sT').textContent=this.t;document.getElementById('sP').textContent=this.p;document.getElementById('sF').textContent=this.f},
+    ok(i,n,c){this.t++;if(c){this.p++;this.log(i,`✅ ${n}`,'p')}else{this.f++;this.log(i,`❌ ${n}`,'f')}this.up()}
+};
+function clr(){document.querySelectorAll('.log').forEach(e=>e.innerHTML='');TF.t=TF.p=TF.f=0;TF.up()}
+
+// 阶段3: T1-子页面无showNodeDetails
+async function t1(){
+    TF.log(1,'--- 子页面GraphVisualizer无showNodeDetails ---','i');
+    try{
+        // 模拟子页面环境: showNodeDetails未定义
+        const saved=window.showNodeDetails;
+        window.showNodeDetails=undefined;
+        const gv=new GraphVisualizer('a1');
+        gv.init(KGData.projectStructure.nodes.slice(0,10),KGData.projectStructure.edges.slice(0,10));
+        await new Promise(r=>setTimeout(r,300));
+        // 验证: onNodeClick内部有if(window.showNodeDetails)防护，不会崩溃
+        // 直接调用onNodeClick方法
+        try {
+            gv.onNodeClick(1);
+            TF.ok(1,'无showNodeDetails时onNodeClick不崩溃',true);
+        } catch(e) {
+            TF.ok(1,'无showNodeDetails时onNodeClick不崩溃',false);
+            TF.log(1,'onNodeClick异常: '+e.message,'f');
+        }
+        // 验证: 其他操作正常
+        gv.searchNodes('UI');
+        TF.ok(1,'无showNodeDetails时searchNodes正常',true);
+        gv.highlightConnected(1);
+        TF.ok(1,'无showNodeDetails时highlightConnected正常',true);
+        gv.destroy();
+        window.showNodeDetails=saved;
+    }catch(e){TF.ok(1,'无showNodeDetails测试',false);TF.log(1,e.message,'f')}
+}
+
+// 阶段3: T2-多实例隔离
+async function t2(){
+    TF.log(2,'--- 多实例GraphVisualizer隔离性 ---','i');
+    try{
+        const n1=[{id:1,label:'A',group:'g1'},{id:2,label:'B',group:'g2'}];
+        const e1=[{from:1,to:2}];
+        const n2=[{id:1,label:'X',group:'g3'},{id:2,label:'Y',group:'g4'}];
+        const e2=[{from:1,to:2}];
+        const gv1=new GraphVisualizer('a2');
+        gv1.init(n1,e1);
+        const gv2=new GraphVisualizer('a2');
+        gv2.init(n2,e2);
+        await new Promise(r=>setTimeout(r,300));
+        // gv1搜索不应影响gv2
+        gv1.searchNodes('A');
+        const gv2Nodes=gv2.nodes.get();
+        const gv2Node1=gv2Nodes.find(n=>n.id===1);
+        const isolated=gv2Node1&&gv2Node1.label==='X';
+        gv1.destroy();
+        gv2.destroy();
+        TF.ok(2,'实例间数据隔离',isolated);
+    }catch(e){TF.ok(2,'实例间数据隔离',false);TF.log(2,e.message,'f')}
+}
+
+// 阶段4: T3-GraphVisualizer全API
+async function t3(){
+    TF.log(3,'--- GraphVisualizer全API遍历 ---','i');
+    const gv=new GraphVisualizer('a3');
+    const nodes=KGData.projectStructure.nodes.slice(0,20);
+    const edges=KGData.projectStructure.edges.slice(0,20);
+    try{
+        TF.ok(3,'constructor',!!gv);
+        const net=gv.init(nodes,edges);TF.ok(3,'init',!!net);
+        gv.fit();TF.ok(3,'fit',true);
+        const phys=gv.togglePhysics();TF.ok(3,'togglePhysics',typeof phys==='boolean');
+        gv.togglePhysics();TF.ok(3,'togglePhysics恢复',true);
+        const res=gv.searchNodes('Ark');TF.ok(3,'searchNodes',Array.isArray(res));
+        gv.searchNodes('');TF.ok(3,'searchNodes空字符串',true);
+        gv.highlightConnected(1);TF.ok(3,'highlightConnected',true);
+        gv.resetHighlight();TF.ok(3,'resetHighlight',true);
+        gv.exportImage();TF.ok(3,'exportImage',true);
+        gv.destroy();TF.ok(3,'destroy',true);
+        // 重复destroy不崩溃
+        gv.destroy();TF.ok(3,'重复destroy安全',true);
+    }catch(e){TF.ok(3,'全API遍历',false);TF.log(3,e.message,'f');try{gv.destroy()}catch(x){}}
+}
+
+// 阶段4: T4-ChartManager全API
+async function t4(){
+    TF.log(4,'--- ChartManager全API遍历 ---','i');
+    const cm=new ChartManager();
+    try{
+        TF.ok(4,'constructor',!!cm);
+        cm.createPieChart('a4',KGData.fileTypes);TF.ok(4,'createPieChart',true);
+        cm.createLineChart('a4',KGData.codeTrend);TF.ok(4,'createLineChart',true);
+        cm.createBarChart('a4',KGData.codeStats.languages);TF.ok(4,'createBarChart',true);
+        cm.createTreemap('a4',KGData.fileStructure);TF.ok(4,'createTreemap',true);
+        const fg=cm.createForceGraph('a4',
+            [{id:1,name:'A',group:'g1'},{id:2,name:'B',group:'g1'}],
+            [{source:1,target:2}]);TF.ok(4,'createForceGraph',!!fg);
+        if(fg&&fg.destroy)fg.destroy();
+        const matrix=[[0,10,5],[10,0,8],[5,8,0]];
+        cm.createChordDiagram('a4',matrix,['A','B','C']);TF.ok(4,'createChordDiagram',true);
+        cm.destroy();TF.ok(4,'destroy',true);
+    }catch(e){TF.ok(4,'全API遍历',false);TF.log(4,e.message,'f')}
+}
+
+// 阶段4: T5-TreeVisualizer全API
+async function t5(){
+    TF.log(5,'--- TreeVisualizer全API遍历 ---','i');
+    try{
+        const tv=new TreeVisualizer('a5');
+        TF.ok(5,'constructor',!!tv);
+        tv.init(KGData.fileStructure);TF.ok(5,'init',true);
+        tv.expandAll();TF.ok(5,'expandAll',true);
+        tv.collapseAll();TF.ok(5,'collapseAll',true);
+        tv.destroy();TF.ok(5,'destroy',true);
+        tv.destroy();TF.ok(5,'重复destroy安全',true);
+    }catch(e){TF.ok(5,'全API遍历',false);TF.log(5,e.message,'f')}
+}
+
+// 阶段4: T6-SunburstVisualizer全API
+async function t6(){
+    TF.log(6,'--- SunburstVisualizer全API遍历 ---','i');
+    try{
+        const sv=new SunburstVisualizer('a6');
+        TF.ok(6,'constructor',!!sv);
+        sv.init(KGData.fileStructure);TF.ok(6,'init',true);
+        sv.destroy();TF.ok(6,'destroy',true);
+        sv.destroy();TF.ok(6,'重复destroy安全',true);
+    }catch(e){TF.ok(6,'全API遍历',false);TF.log(6,e.message,'f')}
+}
+
+// 阶段5: T7-完整用户操作链路
+async function t7(){
+    TF.log(7,'--- 完整用户操作链路 ---','i');
+    try{
+        const gv=new GraphVisualizer('a7');
+        gv.init(KGData.projectStructure.nodes,KGData.projectStructure.edges);
+        await new Promise(r=>setTimeout(r,500));
+        // 模拟: 搜索→聚焦→高亮→重置→切换物理→导出→销毁
+        const results=gv.searchNodes('UI');
+        TF.ok(7,'搜索UI组件',results.length>0);
+        if(results.length>0){
+            gv.focusNode(results[0].id);TF.ok(7,'聚焦节点',true);
+        } else {
+            // Bug #99修复: searchNodes返回空时跳过focusNode
+            TF.ok(7,'搜索无结果时跳过focusNode',true);
+        }
+        gv.highlightConnected(1);TF.ok(7,'高亮连接',true);
+        gv.resetHighlight();TF.ok(7,'重置高亮',true);
+        gv.togglePhysics();TF.ok(7,'切换物理',true);
+        gv.fit();TF.ok(7,'适配视图',true);
+        gv.exportImage();TF.ok(7,'导出图片',true);
+        gv.destroy();TF.ok(7,'销毁',true);
+    }catch(e){TF.ok(7,'完整操作链路',false);TF.log(7,e.message,'f')}
+}
+
+// 阶段5: T8-搜索高亮重置闭环
+async function t8(){
+    TF.log(8,'--- 搜索→高亮→重置闭环 ---','i');
+    try{
+        const gv=new GraphVisualizer('a8');
+        const nodes=[{id:1,label:'Apple',group:'g1'},{id:2,label:'Application',group:'g1'},{id:3,label:'Banana',group:'g2'}];
+        const edges=[{from:1,to:2},{from:2,to:3}];
+        gv.init(nodes,edges);
+        await new Promise(r=>setTimeout(r,300));
+        // 搜索
+        gv.searchNodes('App');TF.ok(8,'搜索App',true);
+        // 高亮
+        gv.highlightConnected(1);TF.ok(8,'高亮节点1连接',true);
+        // 重置
+        gv.resetHighlight();TF.ok(8,'重置高亮',true);
+        // 验证所有节点borderWidth恢复默认
+        const allN=gv.nodes.get();
+        const allDefault=allN.every(n=>n.borderWidth===undefined||n.borderWidth===1||n.borderWidth===2);
+        TF.ok(8,'重置后borderWidth恢复',allDefault);
+        gv.destroy();
+    }catch(e){TF.ok(8,'搜索高亮重置闭环',false);TF.log(8,e.message,'f')}
+}
+
+// 阶段6: T9-节点增删后数据同步
+async function t9(){
+    TF.log(9,'--- 节点增删后数据同步 ---','i');
+    try{
+        const gv=new GraphVisualizer('a9');
+        const nodes=[{id:1,label:'A',group:'g1'},{id:2,label:'B',group:'g2'}];
+        const edges=[{from:1,to:2}];
+        gv.init(nodes,edges);
+        await new Promise(r=>setTimeout(r,300));
+        // 添加节点
+        gv.nodes.update([{id:3,label:'C',group:'g3'}]);
+        TF.ok(9,'添加节点后count=3',gv.nodes.length===3);
+        // 添加边
+        gv.edges.update([{from:2,to:3}]);
+        TF.ok(9,'添加边后count=2',gv.edges.length===2);
+        // 删除节点
+        gv.nodes.remove(3);
+        TF.ok(9,'删除节点后count=2',gv.nodes.length===2);
+        // 搜索新增节点
+        const res=gv.searchNodes('C');
+        TF.ok(9,'删除后搜索不到C',res.length===0);
+        gv.destroy();
+    }catch(e){TF.ok(9,'节点增删同步',false);TF.log(9,e.message,'f')}
+}
+
+// 阶段6: T10-searchNodes结果一致性
+async function t10(){
+    TF.log(10,'--- searchNodes结果一致性 ---','i');
+    try{
+        const gv=new GraphVisualizer('a10');
+        const nodes=KGData.projectStructure.nodes.slice(0,30);
+        const edges=KGData.projectStructure.edges.slice(0,30);
+        gv.init(nodes,edges);
+        await new Promise(r=>setTimeout(r,300));
+        // 搜索存在的节点
+        const r1=gv.searchNodes('UI');
+        TF.ok(10,'搜索"UI"返回数组',Array.isArray(r1));
+        // 搜索不存在的节点
+        const r2=gv.searchNodes('ZZZ_NOT_EXIST_12345');
+        TF.ok(10,'搜索不存在返回空数组',r2.length===0);
+        // 搜索空字符串
+        const r3=gv.searchNodes('');
+        TF.ok(10,'搜索空字符串返回空数组',r3.length===0);
+        // 搜索特殊字符
+        const r4=gv.searchNodes('<script>');
+        TF.ok(10,'搜索XSS字符串不崩溃',true);
+        // 大小写
+        const r5=gv.searchNodes('ui');
+        TF.ok(10,'搜索"ui"(小写)结果与"UI"不同或相同(取决于实现)',Array.isArray(r5));
+        gv.destroy();
+    }catch(e){TF.ok(10,'searchNodes一致性',false);TF.log(10,e.message,'f')}
+}
+
+// 阶段6: T11-highlightConnected后resetHighlight
+async function t11(){
+    TF.log(11,'--- highlightConnected后resetHighlight ---','i');
+    try{
+        const gv=new GraphVisualizer('a11');
+        const nodes=[{id:1,label:'A',group:'g1'},{id:2,label:'B',group:'g1'},{id:3,label:'C',group:'g2'},{id:4,label:'D',group:'g2'}];
+        const edges=[{from:1,to:2},{from:2,to:3},{from:3,to:4}];
+        gv.init(nodes,edges);
+        await new Promise(r=>setTimeout(r,300));
+        // 高亮节点1的连接
+        gv.highlightConnected(1);
+        const highlighted=gv.nodes.get();
+        const hasOpacity=highlighted.some(n=>n.opacity!==undefined);
+        TF.ok(11,'highlightConnected后节点有opacity变化',hasOpacity);
+        // 重置
+        gv.resetHighlight();
+        const reset=gv.nodes.get();
+        const allOpacity1=reset.every(n=>n.opacity===undefined||n.opacity===1);
+        TF.ok(11,'resetHighlight后所有节点opacity恢复',allOpacity1);
+        // 边也恢复
+        const allEdgeOpacity=gv.edges.get().every(e=>e.opacity===undefined||e.opacity===1);
+        TF.ok(11,'resetHighlight后所有边opacity恢复',allEdgeOpacity);
+        gv.destroy();
+    }catch(e){TF.ok(11,'highlightConnected重置',false);TF.log(11,e.message,'f')}
+}
+
+// 阶段7: T12-1000次创建销毁
+async function t12(){
+    TF.log(12,'--- 1000次创建销毁循环 ---','i');
+    const nodes=[{id:1,label:'A',group:'component'},{id:2,label:'B',group:'utility'}];
+    const edges=[{from:1,to:2}];
+    const t0=performance.now();
+    let crashed=false;
+    try{
+        for(let i=0;i<1000;i++){
+            const gv=new GraphVisualizer('a12');
+            gv.init(nodes,edges);
+            gv.fit();gv.searchNodes('A');gv.highlightConnected(1);gv.resetHighlight();
+            gv.destroy();
+        }
+        const dt=performance.now()-t0;
+        TF.ok(12,`1000次循环无崩溃 (${dt.toFixed(0)}ms, avg ${(dt/1000).toFixed(1)}ms)`,!crashed);
+    }catch(e){crashed=true;TF.ok(12,'1000次循环无崩溃',false);TF.log(12,e.message,'f')}
+}
+
+// 阶段7: T13-DOM节点计数
+async function t13(){
+    TF.log(13,'--- DOM节点计数监控 ---','i');
+    const before=document.querySelectorAll('*').length;
+    try{
+        for(let i=0;i<100;i++){
+            const gv=new GraphVisualizer('a13');
+            gv.init([{id:1,label:'N'+i,group:'g1'},{id:2,label:'N'+(i+1),group:'g2'}],[{from:1,to:2}]);
+            gv.destroy();
+        }
+        const after=document.querySelectorAll('*').length;
+        const leak=after-before;
+        TF.ok(13,`100次循环DOM增长${leak}个节点 (${before}→${after})`,leak<50);
+        if(leak>=50)TF.log(13,`⚠ DOM泄漏! 增长了${leak}个节点`,'w');
+    }catch(e){TF.ok(13,'DOM监控',false);TF.log(13,e.message,'f')}
+}
+
+// Bug #94: T14-BarChart全零数据
+async function t14(){
+    TF.log(14,'--- BarChart全零数据 (#94) ---','i');
+    const cm=new ChartManager();
+    try{
+        cm.createBarChart('a14',[{name:'A',value:0},{name:'B',value:0},{name:'C',value:0}]);
+        TF.ok(14,'全零数据不崩溃',true);
+        // 恢复正常数据
+        cm.createBarChart('a14',KGData.codeStats.languages);
+        TF.ok(14,'正常数据可恢复',true);
+    }catch(e){TF.ok(14,'全零数据',false);TF.log(14,e.message,'f')}
+}
+
+// Bug #95: T15-LineChart无效日期
+async function t15(){
+    TF.log(15,'--- LineChart无效日期 (#95) ---','i');
+    const cm=new ChartManager();
+    try{
+        // 包含无效日期
+        cm.createLineChart('a15',[{date:'2025-01-01',lines:100},{date:'INVALID',lines:200},{date:'2025-01-03',lines:300}]);
+        TF.ok(15,'无效日期被过滤不崩溃',true);
+        // 全部无效日期
+        cm.createLineChart('a15',[{date:'bad',lines:100},{date:'also-bad',lines:200}]);
+        TF.ok(15,'全无效日期安全返回',true);
+        // 正常恢复
+        cm.createLineChart('a15',KGData.codeTrend);
+        TF.ok(15,'正常数据可恢复',true);
+    }catch(e){TF.ok(15,'无效日期',false);TF.log(15,e.message,'f')}
+}
+
+// Bug #93: T16-双重转义修复
+async function t16(){
+    TF.log(16,'--- 双重转义修复验证 (#93) ---','i');
+    try{
+        const gv=new GraphVisualizer('a16');
+        const nodes=[{id:1,label:'<b>Bold</b>',group:'g1',title:'Test & "Quotes"'},{id:2,label:'Normal',group:'g2'}];
+        const edges=[{from:1,to:2}];
+        gv.init(nodes,edges);
+        await new Promise(r=>setTimeout(r,300));
+        // 验证节点label未被预转义
+        const node1=gv.nodes.get(1);
+        const noDoubleEscape=!node1.label.includes('&amp;');
+        TF.ok(16,'label无双重转义',noDoubleEscape);
+        // 验证label包含原始特殊字符（vis.js纯文本模式）
+        const hasOriginal=node1.label.includes('<b>');
+        TF.ok(16,'label保留原始HTML标签(纯文本模式)',hasOriginal);
+        gv.destroy();
+    }catch(e){TF.ok(16,'双重转义',false);TF.log(16,e.message,'f')}
+}
+
+// 运行全部
+async function runAll(){
+    clr();
+    const tests=[t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13,t14,t15,t16];
+    for(let i=0;i<tests.length;i++){
+        await tests[i]();
+        await new Promise(r=>setTimeout(r,50));
+    }
+    TF.log(1,`\n========== 最终: ${TF.p}/${TF.t} 通过, ${TF.f} 失败 ==========`,TF.f===0?'p':'f');
+}
+</script>
+</body>
+</html>
