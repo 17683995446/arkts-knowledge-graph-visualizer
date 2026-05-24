@@ -179,6 +179,56 @@ class ChartManager {
         }
         KGLog.info('createLineChart', `parsed ${validData.length} valid data points (filtered ${parsedData.length - validData.length} invalid)`);
 
+        // Bug #131 fix: LTTB降采样算法
+        const MAX_LINE_POINTS = 500; // 最大渲染点数
+
+        function downsampleLTTB(data, maxPoints) {
+            if (data.length <= maxPoints) return data;
+            
+            const result = [];
+            const bucketSize = (data.length - 2) / (maxPoints - 2);
+            
+            // 始终保留第一个点
+            result.push(data[0]);
+            
+            for (let i = 0; i < maxPoints - 2; i++) {
+                const start = Math.floor(i * bucketSize) + 1;
+                const end = Math.floor((i + 1) * bucketSize) + 1;
+                
+                // 计算最大三角形面积的点
+                const prevPoint = result[result.length - 1];
+                const nextPoint = data[Math.min(end, data.length - 1)];
+                
+                let maxArea = -1;
+                let maxAreaIndex = start;
+                
+                for (let j = start; j < end && j < data.length; j++) {
+                    const area = Math.abs(
+                        (prevPoint.date - nextPoint.date) * (data[j].lines - prevPoint.lines) -
+                        (prevPoint.date - data[j].date) * (nextPoint.lines - prevPoint.lines)
+                    ) / 2;
+                    if (area > maxArea) {
+                        maxArea = area;
+                        maxAreaIndex = j;
+                    }
+                }
+                
+                result.push(data[maxAreaIndex]);
+            }
+            
+            // 始终保留最后一个点
+            result.push(data[data.length - 1]);
+            
+            return result;
+        }
+
+        // 应用降采样
+        const sampledData = downsampleLTTB(validData, MAX_LINE_POINTS);
+        if (sampledData.length < validData.length) {
+            KGLog.info('createLineChart', `Downsampled ${validData.length} → ${sampledData.length} points using LTTB`);
+            validData = sampledData;
+        }
+
         // Scales
         // Bug #92修复: 防止单数据点或相同值导致退化domain
         const minLines = d3.min(validData, d => d.lines);
@@ -353,6 +403,10 @@ class ChartManager {
             .domain(yDomain)
             .range([height, 0]);
 
+        // Bug #132 fix: 限制动画数据量
+        const MAX_ANIMATED_BARS = 20;
+        const useAnimation = data.length <= MAX_ANIMATED_BARS;
+
         // Bars
         svg.selectAll('.bar')
             .data(data)
@@ -366,8 +420,8 @@ class ChartManager {
             .attr('fill', d => d.color || '#2563eb')
             .attr('rx', 4)
             .transition()
-            .duration(800)
-            .delay((d, i) => i * 100)
+            .duration(useAnimation ? 800 : 0)
+            .delay(useAnimation ? (d, i) => i * 50 : 0) // 减少延迟时间
             .attr('y', d => y(d.value))
             .attr('height', d => height - y(d.value));
 
@@ -498,12 +552,14 @@ class ChartManager {
         if (!links || !Array.isArray(links)) { KGLog.warn('createForceGraph', 'invalid links data'); console.warn('createForceGraph: invalid links'); return this; }
         container.selectAll('*').remove();
 
-        // Deep copy nodes to avoid mutating original data
-        const simNodes = JSON.parse(JSON.stringify(nodes));
+        // Bug #134 fix: 使用更高效的拷贝方式
+        const simNodes = typeof structuredClone === 'function' 
+            ? structuredClone(nodes) 
+            : nodes.map(n => ({ ...n }));
         // Convert link format for d3 compatibility
-        const d3Links = links.map(l => ({ source: l.from || l.source, target: l.to || l.target }));
+        const simLinks = links.map(l => ({ source: l.from || l.source, target: l.to || l.target }));
 
-        KGLog.info('createForceGraph', `converted ${d3Links.length} links for D3`);
+        KGLog.info('createForceGraph', `converted ${simLinks.length} links for D3`);
 
         const width = options.width || containerNode.getBoundingClientRect().width;
         const height = options.height || 500;
@@ -517,9 +573,12 @@ class ChartManager {
 
         const g = svg.append('g');
 
-        // Simulation
+        // Bug #133 fix: 添加迭代限制和更快的alpha衰减
+        const MAX_TICKS = 300;
         const simulation = d3.forceSimulation(simNodes)
-            .force('link', d3.forceLink(d3Links).id(d => d.id).distance(100))
+            .alphaDecay(0.02)  // 加快衰减 (默认0.0228)
+            .velocityDecay(0.4)  // 增加阻尼 (默认0.4)
+            .force('link', d3.forceLink(simLinks).id(d => d.id).distance(100))
             .force('charge', d3.forceManyBody().strength(-300))
             .force('center', d3.forceCenter(width / 2, height / 2))
             .force('collision', d3.forceCollide().radius(d => (d.size || 20) + 10));
@@ -527,7 +586,7 @@ class ChartManager {
         // Links
         const link = g.append('g')
             .selectAll('line')
-            .data(d3Links)
+            .data(simLinks)
             .enter()
             .append('line')
             .attr('stroke', '#475569')
@@ -560,7 +619,19 @@ class ChartManager {
             .style('pointer-events', 'none');
 
         // Update positions
+        // Bug #133 fix: 添加迭代计数器
+        let tickCount = 0;
+        const tickStartTime = performance.now();
+
         simulation.on('tick', () => {
+            tickCount++;
+
+            // 达到最大迭代次数时停止
+            if (tickCount >= MAX_TICKS) {
+                simulation.stop();
+                KGLog.info('createForceGraph', `Simulation stopped after ${MAX_TICKS} ticks (${(performance.now() - tickStartTime).toFixed(1)}ms)`);
+            }
+
             link
                 .attr('x1', d => d.source.x)
                 .attr('y1', d => d.source.y)
@@ -587,7 +658,7 @@ class ChartManager {
             d.fy = null;
         }
 
-        KGLog.exit('createForceGraph', `simulation started with ${simNodes.length} nodes, ${d3Links.length} links`);
+        KGLog.exit('createForceGraph', `simulation started with ${simNodes.length} nodes, ${simLinks.length} links`);
         return { svg, simulation, node, link, destroy: function() {
             // Bug #31修复: 提供destroy方法停止simulation并清理DOM
             // Bug #81修复: 正确移除D3 zoom事件
@@ -692,8 +763,15 @@ class ChartManager {
     // Bug #31修复: 添加destroy方法清理所有残留的tooltip和chart引用
     destroy() {
         KGLog.entry('destroy', 'cleaning up all charts and tooltips');
-        d3.selectAll('.chart-tooltip').remove();
+        // Bug #135 fix: 清理所有图表实例
+        Object.values(this.charts).forEach(chart => {
+            if (chart && typeof chart.destroy === 'function') {
+                chart.destroy();
+            }
+        });
         this.charts = {};
+        // Bug #138 fix: 清理所有tooltip
+        d3.selectAll('.chart-tooltip').remove();
         KGLog.exit('destroy', 'cleanup complete');
     }
 }

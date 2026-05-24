@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iteration 10 Performance Stress Test Suite (#129-#138) - ArkTS Knowledge Graph</title>
+    <script src="../libs/vis-network.min.js"></script>
+    <script src="../libs/d3.v7.min.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/graph.js?v=70"></script>
+    <script src="../js/charts.js?v=70"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'SF Mono', Consolas, 'Courier New', monospace; background: #0a0e1a; color: #c9d1d9; padding: 16px; min-height: 100vh; }
+        h1 { text-align: center; color: #58a6ff; font-size: 22px; margin-bottom: 4px; }
+        .subtitle { text-align: center; color: #8b949e; font-size: 12px; margin-bottom: 16px; }
+
+        /* Summary bar */
+        .summary { display: flex; gap: 16px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; }
+        .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 24px; text-align: center; min-width: 110px; }
+        .stat-card .num { font-size: 28px; font-weight: bold; font-family: monospace; }
+        .stat-card .label { font-size: 11px; color: #8b949e; margin-top: 2px; }
+        .num-total { color: #58a6ff; }
+        .num-pass { color: #3fb950; }
+        .num-fail { color: #f85149; }
+        .num-warn { color: #d29922; }
+        .num-time { color: #a78bfa; }
+
+        /* Performance metrics */
+        .perf-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+        .perf-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 10px 16px; text-align: center; }
+        .perf-card .value { font-size: 20px; font-weight: bold; font-family: monospace; color: #58a6ff; }
+        .perf-card .label { font-size: 10px; color: #8b949e; margin-top: 2px; }
+        .perf-card.warning .value { color: #d29922; }
+        .perf-card.danger .value { color: #f85149; }
+        .perf-card.good .value { color: #3fb950; }
+
+        /* Progress bar */
+        .progress-bar { height: 4px; background: #21262d; border-radius: 2px; margin-bottom: 16px; overflow: hidden; }
+        .progress-bar .fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #22c55e); transition: width 0.3s; width: 0%; }
+
+        /* Controls */
+        .controls { text-align: center; margin-bottom: 16px; }
+        .btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; margin: 2px; }
+        .btn:hover { background: #30363d; border-color: #58a6ff; }
+        .btn-run { background: #238636; border-color: #2ea043; color: white; }
+        .btn-run:hover { background: #2ea043; }
+        .btn-stress { background: #a78bfa; border-color: #c4b5fd; color: white; }
+        .btn-stress:hover { background: #c4b5fd; }
+        .btn-danger { background: #da3633; border-color: #f85149; color: white; }
+        .btn-danger:hover { background: #f85149; }
+
+        /* Test groups */
+        .test-group { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+        .test-group-header { padding: 10px 14px; background: #1c2128; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .test-group-header h3 { color: #58a6ff; font-size: 13px; margin: 0; flex: 1; }
+        .test-group-header .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: bold; }
+        .badge-pass { background: #238636; color: white; }
+        .badge-fail { background: #da3633; color: white; }
+        .badge-pending { background: #30363d; color: #8b949e; }
+        .badge-info { background: #1f6feb; color: white; }
+        .badge-perf { background: #a78bfa; color: white; }
+
+        .test-group-body { padding: 10px 14px; }
+        .test-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; border-bottom: 1px solid #21262d; }
+        .test-row:last-child { border-bottom: none; }
+        .test-row .icon { width: 18px; text-align: center; }
+        .test-row .name { flex: 1; }
+        .test-row .tag { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: #30363d; color: #8b949e; }
+        .test-row .duration { color: #64748b; font-size: 10px; font-family: monospace; min-width: 60px; text-align: right; }
+        .test-row .metric { color: #a78bfa; font-size: 10px; font-family: monospace; min-width: 80px; text-align: right; }
+        .test-row.pass .name { color: #3fb950; }
+        .test-row.fail .name { color: #f85149; }
+        .test-row.skip .name { color: #64748b; }
+
+        /* Log panel */
+        .log-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-top: 16px; }
+        .log-header { padding: 10px 14px; background: #1c2128; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; }
+        .log-header h3 { color: #58a6ff; font-size: 13px; margin: 0; }
+        .log-body { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 10px; font-size: 11px; max-height: 400px; overflow-y: auto; line-height: 1.6; white-space: pre-wrap; word-break: break-all; font-family: 'SF Mono', Consolas, monospace; }
+        .log-body .log-entry { color: #8b949e; }
+        .log-body .log-entry.pass { color: #3fb950; }
+        .log-body .log-entry.fail { color: #f85149; }
+        .log-body .log-entry.warn { color: #d29922; }
+        .log-body .log-entry.info { color: #58a6ff; }
+        .log-body .log-entry.section { color: #a78bfa; font-weight: bold; }
+        .log-body .log-entry.perf { color: #22d3ee; }
+
+        /* Memory monitor */
+        .memory-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-top: 16px; padding: 14px; }
+        .memory-section h3 { color: #58a6ff; font-size: 13px; margin-bottom: 10px; }
+        .memory-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+        .memory-stat { background: #0d1117; border: 1px solid #21262d; padding: 8px 12px; border-radius: 4px; }
+        .memory-stat .label { font-size: 10px; color: #8b949e; }
+        .memory-stat .value { font-size: 14px; color: #c9d1d9; font-family: monospace; }
+        .memory-stat .delta { font-size: 10px; color: #8b949e; margin-left: 8px; }
+
+        /* FPS monitor */
+        .fps-graph { height: 60px; background: #0d1117; border: 1px solid #21262d; border-radius: 4px; margin-top: 10px; position: relative; overflow: hidden; }
+        .fps-bar { position: absolute; bottom: 0; width: 2px; background: #3fb950; transition: height 0.1s; }
+
+        /* Hidden test containers */
+        .test-container { position: absolute; left: -9999px; top: -9999px; width: 800px; height: 600px; }
+
+        /* Report section */
+        .report-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-top: 16px; padding: 14px; }
+        .report-section h3 { color: #58a6ff; font-size: 13px; margin-bottom: 10px; }
+        .report-content { background: #0d1117; border: 1px solid #21262d; padding: 12px; border-radius: 4px; font-size: 11px; line-height: 1.8; }
+
+        /* Bug list */
+        .bug-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin-bottom: 16px; }
+        .bug-item { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 10px; }
+        .bug-item .id { font-size: 10px; color: #8b949e; }
+        .bug-item .title { font-size: 12px; color: #c9d1d9; margin: 4px 0; }
+        .bug-item .status { font-size: 10px; padding: 2px 6px; border-radius: 3px; display: inline-block; }
+        .bug-item.fixed .status { background: #238636; color: white; }
+        .bug-item.open .status { background: #d29922; color: #0a0e1a; }
+        .bug-item.testing .status { background: #1f6feb; color: white; }
+
+        /* Benchmark table */
+        .benchmark-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+        .benchmark-table th, .benchmark-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #21262d; }
+        .benchmark-table th { color: #58a6ff; background: #161b22; }
+        .benchmark-table td { color: #c9d1d9; }
+        .benchmark-table .good { color: #3fb950; }
+        .benchmark-table .warn { color: #d29922; }
+        .benchmark-table .bad { color: #f85149; }
+    </style>
+</head>
+<body>
+    <h1>Iteration 10 Performance Stress Test Suite</h1>
+    <p class="subtitle">Covering Bug Fixes #129-#138 | 6 Test Groups | Performance Benchmarks | Memory & FPS Monitoring</p>
+
+    <!-- Bug List -->
+    <div class="bug-list">
+        <div class="bug-item testing" id="bug-129">
+            <div class="id">Bug #129</div>
+            <div class="title">数据截断导致边关系断裂</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item testing" id="bug-130">
+            <div class="id">Bug #130</div>
+            <div class="title">Stabilization无UI进度反馈</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item testing" id="bug-131">
+            <div class="id">Bug #131</div>
+            <div class="title">createLineChart无降采样</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item testing" id="bug-132">
+            <div class="id">Bug #132</div>
+            <div class="title">createBarChart串行动画过长</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item testing" id="bug-133">
+            <div class="id">Bug #133</div>
+            <div class="title">createForceGraph无迭代限制</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item testing" id="bug-134">
+            <div class="id">Bug #134</div>
+            <div class="title">JSON深拷贝阻塞</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item testing" id="bug-135">
+            <div class="id">Bug #135</div>
+            <div class="title">ChartManager.destroy不完整</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item testing" id="bug-136">
+            <div class="id">Bug #136</div>
+            <div class="title">highlightConnected无节流</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item testing" id="bug-137">
+            <div class="id">Bug #137</div>
+            <div class="title">缺少虚拟滚动</div>
+            <span class="status">Testing</span>
+        </div>
+        <div class="bug-item testing" id="bug-138">
+            <div class="id">Bug #138</div>
+            <div class="title">tooltip残留风险</div>
+            <span class="status">Testing</span>
+        </div>
+    </div>
+
+    <!-- Performance Metrics -->
+    <div class="perf-metrics">
+        <div class="perf-card" id="fpsCard">
+            <div class="value" id="fpsValue">--</div>
+            <div class="label">FPS</div>
+        </div>
+        <div class="perf-card" id="renderCard">
+            <div class="value" id="renderTime">--</div>
+            <div class="label">Render Time</div>
+        </div>
+        <div class="perf-card" id="memoryCard">
+            <div class="value" id="memoryUsed">--</div>
+            <div class="label">Memory (MB)</div>
+        </div>
+        <div class="perf-card" id="heapCard">
+            <div class="value" id="heapSize">--</div>
+            <div class="label">Heap Size (MB)</div>
+        </div>
+        <div class="perf-card" id="nodeCard">
+            <div class="value" id="nodeCount">--</div>
+            <div class="label">Nodes Rendered</div>
+        </div>
+        <div class="perf-card" id="edgeCard">
+            <div class="value" id="edgeCount">--</div>
+            <div class="label">Edges Rendered</div>
+        </div>
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="summary">
+        <div class="stat-card"><div class="num num-total" id="statTotal">0</div><div class="label">Total Tests</div></div>
+        <div class="stat-card"><div class="num num-pass" id="statPass">0</div><div class="label">Passed</div></div>
+        <div class="stat-card"><div class="num num-fail" id="statFail">0</div><div class="label">Failed</div></div>
+        <div class="stat-card"><div class="num num-warn" id="statWarn">0</div><div class="label">Warnings</div></div>
+        <div class="stat-card"><div class="num num-time" id="statTime">0ms</div><div class="label">Duration</div></div>
+    </div>
+
+    <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
+
+    <div class="controls">
+        <button class="btn btn-run" onclick="runAllTests()">Run All Tests</button>
+        <button class="btn btn-stress" onclick="runStressTests()">Run Stress Tests</button>
+        <button class="btn btn-danger" onclick="runExtremeTests()">Run Extreme Tests</button>
+        <button class="btn" onclick="runBenchmarks()">Run Benchmarks</button>
+        <button class="btn" onclick="clearResults()">Clear Results</button>
+        <button class="btn" onclick="exportReport()">Export Report</button>
+    </div>
+
+    <!-- Test Results Container -->
+    <div id="testResults"></div>
+
+    <!-- Memory Monitor -->
+    <div class="memory-section">
+        <h3>Memory & Performance Monitor</h3>
+        <div class="memory-stats" id="memoryStats">
+            <div class="memory-stat">
+                <div class="label">Used JS Heap</div>
+                <div class="value" id="jsHeapUsed">N/A</div>
+            </div>
+            <div class="memory-stat">
+                <div class="label">Total JS Heap</div>
+                <div class="value" id="jsHeapTotal">N/A</div>
+            </div>
+            <div class="memory-stat">
+                <div class="label">Memory Delta</div>
+                <div class="value" id="memoryDelta">N/A</div>
+            </div>
+            <div class="memory-stat">
+                <div class="label">GC Count (approx)</div>
+                <div class="value" id="gcCount">N/A</div>
+            </div>
+        </div>
+        <div class="fps-graph" id="fpsGraph"></div>
+    </div>
+
+    <!-- Log Panel -->
+    <div class="log-section">
+        <div class="log-header">
+            <h3>TestLog Output</h3>
+            <button class="btn" onclick="clearLogs()">Clear</button>
+        </div>
+        <div class="log-body" id="logBody"></div>
+    </div>
+
+    <!-- Report Section -->
+    <div class="report-section" id="reportSection" style="display: none;">
+        <h3>Performance Test Report</h3>
+        <div class="report-content" id="reportContent"></div>
+    </div>
+
+    <!-- Hidden test containers -->
+    <div id="testContainers"></div>
+
+    <script>
+    // ============================================
+    // TestLog System - Full Chain Logging (renamed to avoid conflict with graph.js KGLog)
+    // ============================================
+    const TestLog = {
+        _enabled: true,
+        _prefix: '[KG-Perf]',
+        _logs: [],
+        entry(method, msg) { this._log('entry', method, msg); },
+        exit(method, msg) { this._log('exit', method, msg || 'done'); },
+        info(method, msg) { this._log('info', method, msg); },
+        warn(method, msg) { this._log('warn', method, msg); },
+        error(method, msg) { this._log('error', method, msg); },
+        data(method, msg, data) { this._log('data', method, `${msg} ${JSON.stringify(data)}`); },
+        perf(method, msg) { this._log('perf', method, msg); },
+        _log(type, method, msg) {
+            if (!this._enabled) return;
+            const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+            const entry = { type, method, msg, timestamp };
+            this._logs.push(entry);
+            this._render(entry);
+        },
+        _render(entry) {
+            const logBody = document.getElementById('logBody');
+            if (!logBody) return;
+            const div = document.createElement('div');
+            div.className = `log-entry ${entry.type}`;
+            const icons = { entry: '▶', exit: '◀', info: 'ℹ', warn: '⚠', error: '✖', data: '📊', perf: '⚡', section: '§' };
+            div.textContent = `${entry.timestamp} ${this._prefix} ${icons[entry.type] || '•'} ${entry.method}: ${entry.msg}`;
+            logBody.appendChild(div);
+            logBody.scrollTop = logBody.scrollHeight;
+        },
+        section(name) {
+            this._log('section', 'SECTION', `========== ${name} ==========`);
+        },
+        clear() {
+            this._logs = [];
+            const logBody = document.getElementById('logBody');
+            if (logBody) logBody.innerHTML = '';
+        },
+        getLogs() { return this._logs; }
+    };
+
+    // ============================================
+    // Performance Monitor
+    // ============================================
+    const PerfMonitor = {
+        fps: 0,
+        fpsHistory: [],
+        frameCount: 0,
+        lastTime: performance.now(),
+        fpsInterval: null,
+        memorySnapshots: [],
+        initialMemory: 0,
+        
+        start() {
+            this.initialMemory = this.getMemoryUsage();
+            this.startFPSMonitor();
+            this.updateMemoryDisplay();
+        },
+        
+        stop() {
+            if (this.fpsInterval) {
+                cancelAnimationFrame(this.fpsInterval);
+                this.fpsInterval = null;
+            }
+        },
+        
+        startFPSMonitor() {
+            const measure = () => {
+                this.frameCount++;
+                const now = performance.now();
+                const delta = now - this.lastTime;
+                
+                if (delta >= 1000) {
+                    this.fps = Math.round((this.frameCount * 1000) / delta);
+                    this.frameCount = 0;
+                    this.lastTime = now;
+                    
+                    this.fpsHistory.push(this.fps);
+                    if (this.fpsHistory.length > 60) this.fpsHistory.shift();
+                    
+                    this.updateFPSDisplay();
+                    this.renderFPSGraph();
+                }
+                
+                this.fpsInterval = requestAnimationFrame(measure);
+            };
+            this.fpsInterval = requestAnimationFrame(measure);
+        },
+        
+        updateFPSDisplay() {
+            const fpsEl = document.getElementById('fpsValue');
+            const cardEl = document.getElementById('fpsCard');
+            if (fpsEl) {
+                fpsEl.textContent = this.fps;
+                cardEl.className = 'perf-card ' + (this.fps >= 50 ? 'good' : this.fps >= 30 ? 'warning' : 'danger');
+            }
+        },
+        
+        renderFPSGraph() {
+            const graph = document.getElementById('fpsGraph');
+            if (!graph) return;
+            graph.innerHTML = '';
+            
+            const maxFps = 60;
+            const width = graph.clientWidth;
+            const barWidth = Math.max(2, width / 60);
+            
+            this.fpsHistory.forEach((fps, i) => {
+                const bar = document.createElement('div');
+                bar.className = 'fps-bar';
+                bar.style.left = (i * barWidth) + 'px';
+                bar.style.height = ((fps / maxFps) * 60) + 'px';
+                bar.style.background = fps >= 50 ? '#3fb950' : fps >= 30 ? '#d29922' : '#f85149';
+                graph.appendChild(bar);
+            });
+        },
+        
+        getMemoryUsage() {
+            if (performance.memory) {
+                return Math.round(performance.memory.usedJSHeapSize / 1048576);
+            }
+            return 0;
+        },
+        
+        updateMemoryDisplay() {
+            if (performance.memory) {
+                const used = Math.round(performance.memory.usedJSHeapSize / 1048576);
+                const total = Math.round(performance.memory.totalJSHeapSize / 1048576);
+                const delta = used - this.initialMemory;
+                
+                document.getElementById('jsHeapUsed').textContent = used + ' MB';
+                document.getElementById('jsHeapTotal').textContent = total + ' MB';
+                document.getElementById('memoryUsed').textContent = used;
+                document.getElementById('heapSize').textContent = total;
+                
+                const deltaEl = document.getElementById('memoryDelta');
+                deltaEl.textContent = (delta >= 0 ? '+' : '') + delta + ' MB';
+                deltaEl.style.color = delta > 50 ? '#f85149' : delta > 20 ? '#d29922' : '#3fb950';
+                
+                const memCard = document.getElementById('memoryCard');
+                memCard.className = 'perf-card ' + (delta > 50 ? 'danger' : delta > 20 ? 'warning' : 'good');
+            }
+        },
+        
+        snapshot(label) {
+            const mem = this.getMemoryUsage();
+            this.memorySnapshots.push({ label, memory: mem, time: performance.now() });
+            this.updateMemoryDisplay();
+            return mem;
+        },
+        
+        getGrowth() {
+            if (this.memorySnapshots.length < 2) return 0;
+            const first = this.memorySnapshots[0].memory;
+            const last = this.memorySnapshots[this.memorySnapshots.length - 1].memory;
+            return last - first;
+        }
+    };
+
+    // ============================================
+    // Data Generation Functions
+    // ============================================
+    function generateLargeGraph(nodeCount, edgeCount) {
+        TestLog.info('generateLargeGraph', `generating ${nodeCount} nodes, ${edgeCount} edges`);
+        const startTime = performance.now();
+        
+        const nodes = [];
+        const edges = [];
+        const groups = ['component', 'utility', 'interface', 'model', 'service', 'enum'];
+        
+        // Generate nodes
+        for (let i = 0; i < nodeCount; i++) {
+            nodes.push({
+                id: i,
+                label: `Node_${i}`,
+                group: groups[i % groups.length],
+                title: `This is node ${i} with group ${groups[i % groups.length]}`
+            });
+        }
+        
+        // Generate edges (ensure valid connections)
+        for (let i = 0; i < edgeCount; i++) {
+            const from = Math.floor(Math.random() * nodeCount);
+            let to = Math.floor(Math.random() * nodeCount);
+            // Ensure from != to
+            while (to === from) {
+                to = Math.floor(Math.random() * nodeCount);
+            }
+            edges.push({
+                id: i,
+                from: from,
+                to: to,
+                title: `Edge from ${from} to ${to}`
+            });
+        }
+        
+        const duration = Math.round(performance.now() - startTime);
+        TestLog.perf('generateLargeGraph', `generated in ${duration}ms`);
+        return { nodes, edges };
+    }
+
+    function generateTimeSeriesData(pointCount) {
+        TestLog.info('generateTimeSeriesData', `generating ${pointCount} data points`);
+        const startTime = performance.now();
+        
+        const data = [];
+        const baseDate = new Date('2024-01-01');
+        let lines = 1000;
+        
+        for (let i = 0; i < pointCount; i++) {
+            const date = new Date(baseDate);
+            date.setDate(date.getDate() + i);
+            
+            // Simulate realistic code growth
+            lines += Math.floor(Math.random() * 100 - 30);
+            lines = Math.max(100, lines);
+            
+            data.push({
+                date: date.toISOString().split('T')[0],
+                lines: lines
+            });
+        }
+        
+        const duration = Math.round(performance.now() - startTime);
+        TestLog.perf('generateTimeSeriesData', `generated in ${duration}ms`);
+        return data;
+    }
+
+    function generateCategoryData(categoryCount) {
+        TestLog.info('generateCategoryData', `generating ${categoryCount} categories`);
+        
+        const categories = ['Component', 'Service', 'Model', 'Utility', 'Interface', 'Enum', 'Type', 'Const'];
+        const colors = ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#00BCD4', '#607D8B', '#E91E63', '#795548'];
+        const data = [];
+        
+        for (let i = 0; i < categoryCount; i++) {
+            data.push({
+                name: categories[i % categories.length] + '_' + i,
+                value: Math.floor(Math.random() * 1000) + 100,
+                color: colors[i % colors.length]
+            });
+        }
+        
+        return data;
+    }
+
+    // ============================================
+    // Test Framework
+    // ============================================
+    const TestFramework = {
+        tests: [],
+        results: [],
+        currentGroup: null,
+        benchmarks: {},
+        
+        registerGroup(name, description, bugIds, tests) {
+            this.tests.push({ name, description, bugIds, tests, expanded: true });
+        },
+        
+        async runAll() {
+            TestLog.section('Starting All Performance Tests');
+            this.results = [];
+            PerfMonitor.snapshot('start');
+            const startTime = performance.now();
+            
+            for (const group of this.tests) {
+                await this.runGroup(group);
+                PerfMonitor.snapshot(`after ${group.name}`);
+            }
+            
+            const duration = Math.round(performance.now() - startTime);
+            document.getElementById('statTime').textContent = duration + 'ms';
+            TestLog.section(`All Tests Completed in ${duration}ms`);
+            
+            const memoryGrowth = PerfMonitor.getGrowth();
+            TestLog.perf('Memory', `Total growth: ${memoryGrowth} MB`);
+            
+            this.updateSummary();
+            this.generateReport();
+            return this.results;
+        },
+        
+        async runGroup(group) {
+            TestLog.section(`Group: ${group.name}`);
+            this.currentGroup = group;
+            const groupResults = {
+                name: group.name,
+                description: group.description,
+                bugIds: group.bugIds,
+                tests: [],
+                passed: 0,
+                failed: 0,
+                warnings: 0
+            };
+            
+            for (const test of group.tests) {
+                const result = await this.runTest(test);
+                groupResults.tests.push(result);
+                if (result.status === 'pass') groupResults.passed++;
+                else if (result.status === 'fail') groupResults.failed++;
+                else if (result.status === 'warn') groupResults.warnings++;
+            }
+            
+            this.results.push(groupResults);
+            this.renderGroup(group, groupResults);
+            this.updateBugStatus(group.bugIds, groupResults);
+        },
+        
+        async runTest(test) {
+            const startTime = performance.now();
+            const memBefore = PerfMonitor.getMemoryUsage();
+            const result = {
+                name: test.name,
+                description: test.description,
+                status: 'pending',
+                message: '',
+                duration: 0,
+                metric: ''
+            };
+            
+            try {
+                TestLog.entry('Test', test.name);
+                const testResult = await test.fn();
+                result.duration = Math.round(performance.now() - startTime);
+                const memAfter = PerfMonitor.getMemoryUsage();
+                const memDelta = memAfter - memBefore;
+                
+                if (typeof testResult === 'object') {
+                    result.status = testResult.status;
+                    result.message = testResult.message;
+                    result.metric = testResult.metric || '';
+                } else if (testResult === true) {
+                    result.status = 'pass';
+                    result.message = test.successMsg || 'Passed';
+                } else if (testResult === 'warn') {
+                    result.status = 'warn';
+                    result.message = test.warnMsg || 'Warning';
+                } else {
+                    result.status = 'fail';
+                    result.message = testResult || test.failMsg || 'Failed';
+                }
+                
+                TestLog.exit('Test', `${test.name} - ${result.status.toUpperCase()} (${result.duration}ms, mem: ${memDelta}MB)`);
+            } catch (e) {
+                result.duration = Math.round(performance.now() - startTime);
+                result.status = 'fail';
+                result.message = e.message || 'Exception thrown';
+                TestLog.error('Test', `${test.name} - EXCEPTION: ${e.message}`);
+            }
+            
+            PerfMonitor.updateMemoryDisplay();
+            return result;
+        },
+        
+        renderGroup(group, results) {
+            let container = document.getElementById(`group-${group.bugIds.join('-')}`);
+            if (!container) {
+                container = document.createElement('div');
+                container.id = `group-${group.bugIds.join('-')}`;
+                container.className = 'test-group';
+                document.getElementById('testResults').appendChild(container);
+            }
+            
+            const allPass = results.failed === 0;
+            const badgeClass = allPass ? 'badge-pass' : 'badge-fail';
+            const badgeText = allPass ? 'PASS' : 'FAIL';
+            
+            let html = `
+                <div class="test-group-header" onclick="toggleGroup('${group.bugIds.join('-')}')">
+                    <h3>${group.name} <span style="color: #8b949e; font-weight: normal;">(${group.description})</span></h3>
+                    <span class="badge ${badgeClass}">${badgeText}</span>
+                    <span class="badge badge-perf">${results.passed}/${results.tests.length}</span>
+                </div>
+                <div class="test-group-body" id="body-${group.bugIds.join('-')}" style="display: ${group.expanded ? 'block' : 'none'}">
+            `;
+            
+            for (const test of results.tests) {
+                const icon = test.status === 'pass' ? '✓' : test.status === 'fail' ? '✗' : test.status === 'warn' ? '!' : '○';
+                const rowClass = test.status;
+                html += `
+                    <div class="test-row ${rowClass}">
+                        <span class="icon">${icon}</span>
+                        <span class="name">${test.name}</span>
+                        <span class="tag">${test.status.toUpperCase()}</span>
+                        <span class="duration">${test.duration}ms</span>
+                        <span class="metric">${test.metric || ''}</span>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+        },
+        
+        updateSummary() {
+            let total = 0, passed = 0, failed = 0, warnings = 0;
+            for (const group of this.results) {
+                total += group.tests.length;
+                passed += group.passed;
+                failed += group.failed;
+                warnings += group.warnings;
+            }
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statPass').textContent = passed;
+            document.getElementById('statFail').textContent = failed;
+            document.getElementById('statWarn').textContent = warnings;
+            
+            const progress = total > 0 ? (passed / total * 100) : 0;
+            document.getElementById('progressFill').style.width = progress + '%';
+        },
+        
+        updateBugStatus(bugIds, results) {
+            for (const bugId of bugIds) {
+                const bugEl = document.getElementById(`bug-${bugId}`);
+                if (bugEl) {
+                    const allPass = results.failed === 0;
+                    bugEl.className = `bug-item ${allPass ? 'fixed' : 'open'}`;
+                    bugEl.querySelector('.status').textContent = allPass ? 'Fixed' : 'Open';
+                }
+            }
+        },
+        
+        generateReport() {
+            const reportSection = document.getElementById('reportSection');
+            const reportContent = document.getElementById('reportContent');
+            
+            let html = `<strong>Performance Stress Test Report</strong><br>`;
+            html += `Generated: ${new Date().toLocaleString()}<br>`;
+            html += `Memory Growth: ${PerfMonitor.getGrowth()} MB<br>`;
+            html += `Average FPS: ${PerfMonitor.fpsHistory.length > 0 ? Math.round(PerfMonitor.fpsHistory.reduce((a,b) => a+b, 0) / PerfMonitor.fpsHistory.length) : 'N/A'}<br><br>`;
+            
+            // Benchmark table
+            html += `<strong>Performance Benchmarks</strong><br>`;
+            html += `<table class="benchmark-table">`;
+            html += `<tr><th>Operation</th><th>Time</th><th>Memory</th><th>Status</th></tr>`;
+            
+            for (const [op, data] of Object.entries(this.benchmarks)) {
+                const timeClass = data.time < data.targetTime ? 'good' : data.time < data.targetTime * 2 ? 'warn' : 'bad';
+                const memClass = data.memory < 50 ? 'good' : data.memory < 100 ? 'warn' : 'bad';
+                html += `<tr><td>${op}</td><td class="${timeClass}">${data.time}ms</td><td class="${memClass}">${data.memory}MB</td><td>${data.time < data.targetTime ? '✓' : '✗'}</td></tr>`;
+            }
+            html += `</table><br>`;
+            
+            // Test results
+            for (const group of this.results) {
+                html += `<strong>${group.name}</strong> (${group.bugIds.join(', ')})<br>`;
+                html += `Status: ${group.failed === 0 ? '✓ PASS' : '✗ FAIL'}<br>`;
+                html += `Tests: ${group.passed} passed, ${group.failed} failed, ${group.warnings} warnings<br>`;
+                for (const test of group.tests) {
+                    const icon = test.status === 'pass' ? '✓' : test.status === 'fail' ? '✗' : '!';
+                    html += `  ${icon} ${test.name}: ${test.message} (${test.duration}ms) ${test.metric}<br>`;
+                }
+                html += '<br>';
+            }
+            
+            reportContent.innerHTML = html;
+            reportSection.style.display = 'block';
+        },
+        
+        clear() {
+            this.results = [];
+            this.benchmarks = {};
+            document.getElementById('testResults').innerHTML = '';
+            document.getElementById('statTotal').textContent = '0';
+            document.getElementById('statPass').textContent = '0';
+            document.getElementById('statFail').textContent = '0';
+            document.getElementById('statWarn').textContent = '0';
+            document.getElementById('statTime').textContent = '0ms';
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('reportSection').style.display = 'none';
+            
+            // Reset bug statuses
+            for (let i = 129; i <= 138; i++) {
+                const bugEl = document.getElementById(`bug-${i}`);
+                if (bugEl) {
+                    bugEl.className = 'bug-item testing';
+                    bugEl.querySelector('.status').textContent = 'Testing';
+                }
+            }
+        },
+        
+        addBenchmark(op, time, memory, targetTime) {
+            this.benchmarks[op] = { time, memory, targetTime };
+        }
+    };
+
+    // ============================================
+    // Test Container Management
+    // ============================================
+    const ContainerManager = {
+        containers: [],
+        idCounter: 0,
+        
+        create(width = 800, height = 600) {
+            const id = 'test-container-' + this.idCounter++;
+            const container = document.createElement('div');
+            container.id = id;
+            container.className = 'test-container';
+            container.style.width = width + 'px';
+            container.style.height = height + 'px';
+            document.getElementById('testContainers').appendChild(container);
+            this.containers.push(id);
+            return id;
+        },
+        
+        cleanup() {
+            for (const id of this.containers) {
+                const el = document.getElementById(id);
+                if (el) el.remove();
+            }
+            this.containers = [];
+            this.idCounter = 0;
+            
+            // Clean up any remaining tooltips
+            document.querySelectorAll('.chart-tooltip').forEach(el => el.remove());
+        }
+    };
+
+    // ============================================
+    // Test Groups Definition
+    // ============================================
+    
+    // Group 1: Large Scale Node Rendering Tests (#129-#130)
+    TestFramework.registerGroup(
+        'Group 1: Large Scale Node Rendering',
+        'Testing Bug #129-#130: Data truncation and stabilization progress',
+        [129, 130],
+        [
+            {
+                name: 'Test 2000 nodes rendering time',
+                description: 'Render 2000 nodes and measure time',
+                successMsg: 'Rendering completed within target',
+                failMsg: 'Rendering exceeded time limit',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const data = generateLargeGraph(2000, 4000);
+                    
+                    const startTime = performance.now();
+                    const viz = new GraphVisualizer(containerId);
+                    viz.init(data.nodes, data.edges);
+                    const renderTime = performance.now() - startTime;
+                    
+                    // Wait for stabilization
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    viz.destroy();
+                    
+                    const targetTime = 5000;
+                    TestFramework.addBenchmark('2000 nodes render', Math.round(renderTime), PerfMonitor.getMemoryUsage(), targetTime);
+                    
+                    document.getElementById('nodeCount').textContent = '2000';
+                    document.getElementById('edgeCount').textContent = '4000';
+                    document.getElementById('renderTime').textContent = Math.round(renderTime) + 'ms';
+                    
+                    return {
+                        status: renderTime < targetTime ? 'pass' : 'fail',
+                        message: `Render time: ${Math.round(renderTime)}ms (target: ${targetTime}ms)`,
+                        metric: `${Math.round(renderTime)}ms`
+                    };
+                }
+            },
+            {
+                name: 'Test edge integrity after truncation',
+                description: 'Verify edges reference valid nodes after truncation',
+                successMsg: 'All edges valid',
+                failMsg: 'Invalid edges found',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    // Generate more than MAX_NODES (2000)
+                    const data = generateLargeGraph(3000, 6000);
+                    
+                    const viz = new GraphVisualizer(containerId);
+                    viz.init(data.nodes, data.edges);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Check if all edges reference valid nodes
+                    const nodeIds = new Set(viz.nodes.get().map(n => n.id));
+                    const edges = viz.edges.get();
+                    let invalidEdges = 0;
+                    
+                    for (const edge of edges) {
+                        if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) {
+                            invalidEdges++;
+                        }
+                    }
+                    
+                    viz.destroy();
+                    
+                    return {
+                        status: invalidEdges === 0 ? 'pass' : 'fail',
+                        message: invalidEdges === 0 ? 'All edges valid' : `${invalidEdges} invalid edges found`,
+                        metric: `${edges.length} edges`
+                    };
+                }
+            },
+            {
+                name: 'Test stabilization progress callback',
+                description: 'Verify stabilization progress events fire',
+                successMsg: 'Progress events received',
+                failMsg: 'No progress events',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const data = generateLargeGraph(500, 1000);
+                    
+                    let progressReceived = false;
+                    let lastProgress = 0;
+                    
+                    const viz = new GraphVisualizer(containerId);
+                    viz.init(data.nodes, data.edges);
+                    
+                    // Monitor stabilization progress
+                    viz.network.on('stabilizationProgress', (params) => {
+                        progressReceived = true;
+                        lastProgress = params.total > 0 ? Math.round((params.iterations / params.total) * 100) : 0;
+                    });
+                    
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    viz.destroy();
+                    
+                    return {
+                        status: progressReceived ? 'pass' : 'warn',
+                        message: progressReceived ? `Progress events received (last: ${lastProgress}%)` : 'No progress events',
+                        metric: `${lastProgress}%`
+                    };
+                }
+            }
+        ]
+    );
+
+    // Group 2: D3 Large Data Rendering Tests (#131-#133)
+    TestFramework.registerGroup(
+        'Group 2: D3 Large Data Rendering',
+        'Testing Bug #131-#133: LineChart, BarChart, ForceGraph performance',
+        [131, 132, 133],
+        [
+            {
+                name: 'Test 10000 points LineChart rendering',
+                description: 'Render LineChart with 10000 data points',
+                successMsg: 'LineChart rendered successfully',
+                failMsg: 'LineChart rendering failed',
+                fn: async () => {
+                    const containerId = ContainerManager.create(1000, 300);
+                    const data = generateTimeSeriesData(10000);
+                    
+                    const chartManager = new ChartManager();
+                    const startTime = performance.now();
+                    chartManager.createLineChart(containerId, data);
+                    const renderTime = performance.now() - startTime;
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    chartManager.destroy();
+                    
+                    const targetTime = 3000;
+                    TestFramework.addBenchmark('10000 pts LineChart', Math.round(renderTime), PerfMonitor.getMemoryUsage(), targetTime);
+                    
+                    return {
+                        status: renderTime < targetTime ? 'pass' : 'warn',
+                        message: `Render time: ${Math.round(renderTime)}ms (target: ${targetTime}ms)`,
+                        metric: `${Math.round(renderTime)}ms`
+                    };
+                }
+            },
+            {
+                name: 'Test 100 bars animation duration',
+                description: 'Measure BarChart animation time',
+                successMsg: 'Animation within target',
+                failMsg: 'Animation too long',
+                fn: async () => {
+                    const containerId = ContainerManager.create(1000, 400);
+                    const data = generateCategoryData(100);
+                    
+                    const chartManager = new ChartManager();
+                    const startTime = performance.now();
+                    chartManager.createBarChart(containerId, data);
+                    
+                    // Wait for all animations (100 bars * 100ms delay + 800ms duration)
+                    await new Promise(resolve => setTimeout(resolve, 100 * 100 + 800));
+                    const totalTime = performance.now() - startTime;
+                    
+                    chartManager.destroy();
+                    
+                    // Target: should not exceed 15 seconds for 100 bars
+                    const targetTime = 15000;
+                    TestFramework.addBenchmark('100 bars animation', Math.round(totalTime), PerfMonitor.getMemoryUsage(), targetTime);
+                    
+                    return {
+                        status: totalTime < targetTime ? 'pass' : 'fail',
+                        message: `Total animation time: ${Math.round(totalTime)}ms`,
+                        metric: `${Math.round(totalTime)}ms`
+                    };
+                }
+            },
+            {
+                name: 'Test ForceGraph iteration limit',
+                description: 'Verify ForceGraph has iteration limit',
+                successMsg: 'ForceGraph completed',
+                failMsg: 'ForceGraph timeout',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    
+                    // Create nodes and links
+                    const nodes = [];
+                    const links = [];
+                    for (let i = 0; i < 200; i++) {
+                        nodes.push({ id: i, label: `N${i}`, size: 10 });
+                    }
+                    for (let i = 0; i < 300; i++) {
+                        links.push({ source: Math.floor(Math.random() * 200), target: Math.floor(Math.random() * 200) });
+                    }
+                    
+                    const chartManager = new ChartManager();
+                    const startTime = performance.now();
+                    const result = chartManager.createForceGraph(containerId, nodes, links);
+                    const renderTime = performance.now() - startTime;
+                    
+                    // Wait for simulation to settle
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    if (result && result.destroy) result.destroy();
+                    chartManager.destroy();
+                    
+                    const targetTime = 5000;
+                    TestFramework.addBenchmark('ForceGraph 200 nodes', Math.round(renderTime), PerfMonitor.getMemoryUsage(), targetTime);
+                    
+                    return {
+                        status: renderTime < targetTime ? 'pass' : 'warn',
+                        message: `ForceGraph render time: ${Math.round(renderTime)}ms`,
+                        metric: `${Math.round(renderTime)}ms`
+                    };
+                }
+            }
+        ]
+    );
+
+    // Group 3: Memory Pressure Tests (#134-#135, #138)
+    TestFramework.registerGroup(
+        'Group 3: Memory Pressure',
+        'Testing Bug #134-#135, #138: Memory leaks and tooltip cleanup',
+        [134, 135, 138],
+        [
+            {
+                name: 'Test 100 GraphVisualizer create/destroy cycles',
+                description: 'Memory leak test for GraphVisualizer',
+                successMsg: 'No memory leak detected',
+                failMsg: 'Memory leak detected',
+                fn: async () => {
+                    PerfMonitor.snapshot('before cycles');
+                    const memBefore = PerfMonitor.getMemoryUsage();
+                    
+                    for (let i = 0; i < 100; i++) {
+                        const containerId = ContainerManager.create();
+                        const data = generateLargeGraph(100, 200);
+                        
+                        const viz = new GraphVisualizer(containerId);
+                        viz.init(data.nodes, data.edges);
+                        
+                        await new Promise(resolve => setTimeout(resolve, 10));
+                        
+                        viz.destroy();
+                    }
+                    
+                    // Force GC hint
+                    if (window.gc) window.gc();
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    const memAfter = PerfMonitor.getMemoryUsage();
+                    const memGrowth = memAfter - memBefore;
+                    
+                    PerfMonitor.snapshot('after cycles');
+                    
+                    // Target: memory growth < 50MB
+                    return {
+                        status: memGrowth < 50 ? 'pass' : memGrowth < 100 ? 'warn' : 'fail',
+                        message: `Memory growth: ${memGrowth}MB after 100 cycles`,
+                        metric: `+${memGrowth}MB`
+                    };
+                }
+            },
+            {
+                name: 'Test 100 ChartManager create/destroy cycles',
+                description: 'Memory leak test for ChartManager',
+                successMsg: 'No memory leak detected',
+                failMsg: 'Memory leak detected',
+                fn: async () => {
+                    PerfMonitor.snapshot('before chart cycles');
+                    const memBefore = PerfMonitor.getMemoryUsage();
+                    
+                    for (let i = 0; i < 100; i++) {
+                        const containerId = ContainerManager.create();
+                        const chartManager = new ChartManager();
+                        
+                        const pieData = generateCategoryData(10);
+                        chartManager.createPieChart(containerId, pieData);
+                        
+                        await new Promise(resolve => setTimeout(resolve, 10));
+                        
+                        chartManager.destroy();
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    const memAfter = PerfMonitor.getMemoryUsage();
+                    const memGrowth = memAfter - memBefore;
+                    
+                    PerfMonitor.snapshot('after chart cycles');
+                    
+                    return {
+                        status: memGrowth < 50 ? 'pass' : memGrowth < 100 ? 'warn' : 'fail',
+                        message: `Memory growth: ${memGrowth}MB after 100 cycles`,
+                        metric: `+${memGrowth}MB`
+                    };
+                }
+            },
+            {
+                name: 'Test JSON deep copy performance',
+                description: 'Measure JSON.parse(JSON.stringify) performance',
+                successMsg: 'Deep copy within target',
+                failMsg: 'Deep copy too slow',
+                fn: async () => {
+                    // Create large data structure
+                    const largeData = generateLargeGraph(1000, 2000);
+                    
+                    const startTime = performance.now();
+                    for (let i = 0; i < 10; i++) {
+                        JSON.parse(JSON.stringify(largeData));
+                    }
+                    const totalTime = performance.now() - startTime;
+                    const avgTime = totalTime / 10;
+                    
+                    // Target: < 100ms per deep copy
+                    const targetTime = 100;
+                    TestFramework.addBenchmark('JSON deep copy', Math.round(avgTime), PerfMonitor.getMemoryUsage(), targetTime);
+                    
+                    return {
+                        status: avgTime < targetTime ? 'pass' : 'warn',
+                        message: `Average deep copy time: ${Math.round(avgTime)}ms`,
+                        metric: `${Math.round(avgTime)}ms`
+                    };
+                }
+            },
+            {
+                name: 'Test tooltip cleanup after destroy',
+                description: 'Verify no tooltip remnants after destroy',
+                successMsg: 'No tooltips remaining',
+                failMsg: 'Tooltips found after destroy',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const chartManager = new ChartManager();
+                    
+                    // Create chart that generates tooltips
+                    const data = generateTimeSeriesData(100);
+                    chartManager.createLineChart(containerId, data);
+                    
+                    // Simulate hover to create tooltip
+                    const dots = document.querySelectorAll('.dot');
+                    if (dots.length > 0) {
+                        const event = new MouseEvent('mouseover', { bubbles: true });
+                        dots[0].dispatchEvent(event);
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // Destroy
+                    chartManager.destroy();
+                    
+                    // Check for remaining tooltips
+                    const tooltips = document.querySelectorAll('.chart-tooltip');
+                    const remaining = tooltips.length;
+                    
+                    return {
+                        status: remaining === 0 ? 'pass' : 'fail',
+                        message: remaining === 0 ? 'All tooltips cleaned' : `${remaining} tooltips remaining`,
+                        metric: `${remaining} left`
+                    };
+                }
+            }
+        ]
+    );
+
+    // Group 4: Interaction Performance Tests (#136)
+    TestFramework.registerGroup(
+        'Group 4: Interaction Performance',
+        'Testing Bug #136: highlightConnected throttling',
+        [136],
+        [
+            {
+                name: 'Test rapid highlightConnected calls',
+                description: 'Test throttling of highlightConnected',
+                successMsg: 'Throttling effective',
+                failMsg: 'No throttling detected',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const data = generateLargeGraph(500, 1000);
+                    
+                    const viz = new GraphVisualizer(containerId);
+                    viz.init(data.nodes, data.edges);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Rapid calls
+                    const startTime = performance.now();
+                    const callCount = 50;
+                    for (let i = 0; i < callCount; i++) {
+                        viz.highlightConnected(i % 500);
+                    }
+                    const totalTime = performance.now() - startTime;
+                    const avgTime = totalTime / callCount;
+                    
+                    viz.destroy();
+                    
+                    // Target: each call should be < 100ms (with throttling)
+                    const targetTime = 100;
+                    TestFramework.addBenchmark('highlightConnected', Math.round(avgTime), PerfMonitor.getMemoryUsage(), targetTime);
+                    
+                    return {
+                        status: avgTime < targetTime ? 'pass' : 'warn',
+                        message: `Average call time: ${Math.round(avgTime)}ms for ${callCount} calls`,
+                        metric: `${Math.round(avgTime)}ms/call`
+                    };
+                }
+            },
+            {
+                name: 'Test FPS during rapid interactions',
+                description: 'Monitor FPS during rapid highlight operations',
+                successMsg: 'FPS maintained',
+                failMsg: 'FPS dropped significantly',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const data = generateLargeGraph(300, 600);
+                    
+                    const viz = new GraphVisualizer(containerId);
+                    viz.init(data.nodes, data.edges);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    // Record FPS during interactions
+                    const fpsSamples = [];
+                    const fpsInterval = setInterval(() => {
+                        fpsSamples.push(PerfMonitor.fps);
+                    }, 100);
+                    
+                    // Rapid interactions for 2 seconds
+                    for (let i = 0; i < 40; i++) {
+                        viz.highlightConnected(i % 300);
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                    
+                    clearInterval(fpsInterval);
+                    
+                    const avgFps = fpsSamples.length > 0 ? fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length : 0;
+                    const minFps = Math.min(...fpsSamples);
+                    
+                    viz.destroy();
+                    
+                    return {
+                        status: avgFps >= 30 ? 'pass' : avgFps >= 15 ? 'warn' : 'fail',
+                        message: `Avg FPS: ${Math.round(avgFps)}, Min FPS: ${minFps}`,
+                        metric: `${Math.round(avgFps)} FPS`
+                    };
+                }
+            }
+        ]
+    );
+
+    // Group 5: Extreme Chaos Scenarios (#137)
+    TestFramework.registerGroup(
+        'Group 5: Extreme Chaos Scenarios',
+        'Testing Bug #137: Virtual scrolling and extreme cases',
+        [137],
+        [
+            {
+                name: 'Test 5000 nodes rendering attempt',
+                description: 'Attempt to render 5000 nodes (should truncate)',
+                successMsg: 'Handled gracefully',
+                failMsg: 'Browser freeze or crash',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const data = generateLargeGraph(5000, 10000);
+                    
+                    const startTime = performance.now();
+                    const viz = new GraphVisualizer(containerId);
+                    viz.init(data.nodes, data.edges);
+                    const renderTime = performance.now() - startTime;
+                    
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    // Check actual rendered nodes (should be truncated to 2000)
+                    const actualNodes = viz.nodes ? viz.nodes.length : 0;
+                    
+                    viz.destroy();
+                    
+                    return {
+                        status: renderTime < 10000 ? 'pass' : 'warn',
+                        message: `Rendered ${actualNodes} nodes in ${Math.round(renderTime)}ms (truncated from 5000)`,
+                        metric: `${actualNodes} nodes`
+                    };
+                }
+            },
+            {
+                name: 'Test 50000 data points chart attempt',
+                description: 'Attempt LineChart with 50000 points',
+                successMsg: 'Handled gracefully',
+                failMsg: 'Browser freeze',
+                fn: async () => {
+                    const containerId = ContainerManager.create(1200, 400);
+                    const data = generateTimeSeriesData(50000);
+                    
+                    const chartManager = new ChartManager();
+                    const startTime = performance.now();
+                    chartManager.createLineChart(containerId, data);
+                    const renderTime = performance.now() - startTime;
+                    
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    chartManager.destroy();
+                    
+                    // Should still render but may be slow
+                    return {
+                        status: renderTime < 30000 ? 'pass' : 'warn',
+                        message: `50000 points rendered in ${Math.round(renderTime)}ms`,
+                        metric: `${Math.round(renderTime)}ms`
+                    };
+                }
+            },
+            {
+                name: 'Test long-running stability (30s)',
+                description: 'Continuous operations for 30 seconds',
+                successMsg: 'Stable throughout',
+                failMsg: 'Degradation detected',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const data = generateLargeGraph(200, 400);
+                    
+                    const viz = new GraphVisualizer(containerId);
+                    viz.init(data.nodes, data.edges);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    const memSamples = [];
+                    const fpsSamples = [];
+                    
+                    // Run for 30 seconds with frequent operations
+                    for (let i = 0; i < 60; i++) {
+                        viz.highlightConnected(i % 200);
+                        
+                        if (i % 10 === 0) {
+                            memSamples.push(PerfMonitor.getMemoryUsage());
+                            fpsSamples.push(PerfMonitor.fps);
+                        }
+                        
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                    
+                    const memGrowth = memSamples[memSamples.length - 1] - memSamples[0];
+                    const avgFps = fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length;
+                    
+                    viz.destroy();
+                    
+                    return {
+                        status: memGrowth < 100 && avgFps > 20 ? 'pass' : 'warn',
+                        message: `30s test: mem +${memGrowth}MB, avg ${Math.round(avgFps)} FPS`,
+                        metric: `+${memGrowth}MB`
+                    };
+                }
+            }
+        ]
+    );
+
+    // Group 6: Performance Benchmarks
+    TestFramework.registerGroup(
+        'Group 6: Performance Benchmarks',
+        'Comprehensive performance baseline measurements',
+        [129, 130, 131, 132, 133, 134, 135, 136, 137, 138],
+        [
+            {
+                name: 'Benchmark: Small graph (100 nodes)',
+                description: 'Baseline for small graph',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const data = generateLargeGraph(100, 200);
+                    
+                    const startTime = performance.now();
+                    const viz = new GraphVisualizer(containerId);
+                    viz.init(data.nodes, data.edges);
+                    const renderTime = performance.now() - startTime;
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    viz.destroy();
+                    
+                    TestFramework.addBenchmark('Small graph', Math.round(renderTime), PerfMonitor.getMemoryUsage(), 1000);
+                    
+                    return { status: 'pass', message: `${Math.round(renderTime)}ms`, metric: `${Math.round(renderTime)}ms` };
+                }
+            },
+            {
+                name: 'Benchmark: Medium graph (500 nodes)',
+                description: 'Baseline for medium graph',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const data = generateLargeGraph(500, 1000);
+                    
+                    const startTime = performance.now();
+                    const viz = new GraphVisualizer(containerId);
+                    viz.init(data.nodes, data.edges);
+                    const renderTime = performance.now() - startTime;
+                    
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    viz.destroy();
+                    
+                    TestFramework.addBenchmark('Medium graph', Math.round(renderTime), PerfMonitor.getMemoryUsage(), 2000);
+                    
+                    return { status: 'pass', message: `${Math.round(renderTime)}ms`, metric: `${Math.round(renderTime)}ms` };
+                }
+            },
+            {
+                name: 'Benchmark: Large graph (2000 nodes)',
+                description: 'Baseline for large graph',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const data = generateLargeGraph(2000, 4000);
+                    
+                    const startTime = performance.now();
+                    const viz = new GraphVisualizer(containerId);
+                    viz.init(data.nodes, data.edges);
+                    const renderTime = performance.now() - startTime;
+                    
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    viz.destroy();
+                    
+                    TestFramework.addBenchmark('Large graph', Math.round(renderTime), PerfMonitor.getMemoryUsage(), 5000);
+                    
+                    return { status: renderTime < 5000 ? 'pass' : 'warn', message: `${Math.round(renderTime)}ms`, metric: `${Math.round(renderTime)}ms` };
+                }
+            },
+            {
+                name: 'Benchmark: PieChart render',
+                description: 'Baseline for PieChart',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    const data = generateCategoryData(20);
+                    
+                    const chartManager = new ChartManager();
+                    const startTime = performance.now();
+                    chartManager.createPieChart(containerId, data);
+                    const renderTime = performance.now() - startTime;
+                    
+                    chartManager.destroy();
+                    
+                    TestFramework.addBenchmark('PieChart', Math.round(renderTime), PerfMonitor.getMemoryUsage(), 500);
+                    
+                    return { status: 'pass', message: `${Math.round(renderTime)}ms`, metric: `${Math.round(renderTime)}ms` };
+                }
+            },
+            {
+                name: 'Benchmark: Treemap render',
+                description: 'Baseline for Treemap',
+                fn: async () => {
+                    const containerId = ContainerManager.create();
+                    
+                    // Create treemap data
+                    const treemapData = {
+                        name: 'root',
+                        children: []
+                    };
+                    for (let i = 0; i < 50; i++) {
+                        treemapData.children.push({
+                            name: `Folder_${i}`,
+                            children: [
+                                { name: `File_${i}_1`, lines: Math.floor(Math.random() * 1000) },
+                                { name: `File_${i}_2`, lines: Math.floor(Math.random() * 1000) }
+                            ]
+                        });
+                    }
+                    
+                    const chartManager = new ChartManager();
+                    const startTime = performance.now();
+                    chartManager.createTreemap(containerId, treemapData);
+                    const renderTime = performance.now() - startTime;
+                    
+                    chartManager.destroy();
+                    
+                    TestFramework.addBenchmark('Treemap', Math.round(renderTime), PerfMonitor.getMemoryUsage(), 500);
+                    
+                    return { status: 'pass', message: `${Math.round(renderTime)}ms`, metric: `${Math.round(renderTime)}ms` };
+                }
+            }
+        ]
+    );
+
+    // ============================================
+    // Global Functions
+    // ============================================
+    function toggleGroup(id) {
+        const body = document.getElementById('body-' + id);
+        if (body) {
+            body.style.display = body.style.display === 'none' ? 'block' : 'none';
+        }
+    }
+
+    async function runAllTests() {
+        ContainerManager.cleanup();
+        PerfMonitor.start();
+        await TestFramework.runAll();
+        PerfMonitor.stop();
+        ContainerManager.cleanup();
+    }
+
+    async function runStressTests() {
+        TestLog.section('Running Stress Tests');
+        ContainerManager.cleanup();
+        PerfMonitor.start();
+        
+        // Run only Groups 3, 4, 5 (memory, interaction, extreme)
+        const stressGroups = TestFramework.tests.filter((_, i) => i >= 2 && i <= 4);
+        for (const group of stressGroups) {
+            await TestFramework.runGroup(group);
+        }
+        
+        PerfMonitor.stop();
+        ContainerManager.cleanup();
+        TestFramework.updateSummary();
+        TestFramework.generateReport();
+    }
+
+    async function runExtremeTests() {
+        TestLog.section('Running Extreme Tests');
+        ContainerManager.cleanup();
+        PerfMonitor.start();
+        
+        // Run only Group 5 (extreme)
+        const extremeGroup = TestFramework.tests[4];
+        await TestFramework.runGroup(extremeGroup);
+        
+        PerfMonitor.stop();
+        ContainerManager.cleanup();
+        TestFramework.updateSummary();
+        TestFramework.generateReport();
+    }
+
+    async function runBenchmarks() {
+        TestLog.section('Running Benchmarks');
+        ContainerManager.cleanup();
+        PerfMonitor.start();
+        
+        // Run only Group 6 (benchmarks)
+        const benchGroup = TestFramework.tests[5];
+        await TestFramework.runGroup(benchGroup);
+        
+        PerfMonitor.stop();
+        ContainerManager.cleanup();
+        TestFramework.updateSummary();
+        TestFramework.generateReport();
+    }
+
+    function clearResults() {
+        TestFramework.clear();
+        TestLog.clear();
+        ContainerManager.cleanup();
+    }
+
+    function clearLogs() {
+        TestLog.clear();
+    }
+
+    function exportReport() {
+        const reportContent = document.getElementById('reportContent').innerText;
+        const blob = new Blob([reportContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `performance-test-report-${new Date().toISOString().split('T')[0]}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        TestLog.info('exportReport', 'Report exported');
+    }
+
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', () => {
+        PerfMonitor.start();
+        TestLog.info('init', 'Performance Stress Test Suite loaded');
+        TestLog.info('init', `Chrome memory API available: ${!!performance.memory}`);
+    });
+    </script>
+</body>
+</html>

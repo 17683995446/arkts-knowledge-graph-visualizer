@@ -109,7 +109,32 @@ class GraphVisualizer {
             },
             ...options
         };
+        // Bug #136 fix: 初始化节流版本的highlightConnected
+        this._throttledHighlightConnected = this._createThrottledHighlight(100);
         KGLog.exit('GraphVisualizer.constructor', 'options configured');
+    }
+
+    /**
+     * Bug #136 fix: 创建节流版本的highlightConnected
+     */
+    _createThrottledHighlight(limit) {
+        let inThrottle = false;
+        let lastArgs = null;
+        const self = this;
+        return function(nodeId) {
+            lastArgs = nodeId;
+            if (!inThrottle) {
+                self._highlightConnectedImpl(nodeId);
+                inThrottle = true;
+                setTimeout(() => {
+                    inThrottle = false;
+                    // 如果在节流期间有新的调用，执行最后一次
+                    if (lastArgs !== nodeId) {
+                        self._highlightConnectedImpl(lastArgs);
+                    }
+                }, limit);
+            }
+        };
     }
 
     /**
@@ -124,18 +149,41 @@ class GraphVisualizer {
             return null;
         }
         // Bug #79修复: 数据规模限制保护，防止浏览器卡死
+        // Bug #129修复: 智能截断 + 边关系验证，防止边指向不存在的节点
         const MAX_NODES = 2000;
         const MAX_EDGES = 5000;
         const nodeCount = nodesData ? nodesData.length : 0;
         const edgeCount = edgesData ? edgesData.length : 0;
+
         if (nodeCount > MAX_NODES) {
-            console.warn(`GraphVisualizer.init: node count ${nodeCount} exceeds limit ${MAX_NODES}, truncating`);
-            KGLog.warn('GraphVisualizer.init', `node count ${nodeCount} exceeds limit ${MAX_NODES}, truncating`);
-            nodesData = nodesData.slice(0, MAX_NODES);
-        }
-        if (edgeCount > MAX_EDGES) {
-            console.warn(`GraphVisualizer.init: edge count ${edgeCount} exceeds limit ${MAX_EDGES}, truncating`);
-            KGLog.warn('GraphVisualizer.init', `edge count ${edgeCount} exceeds limit ${MAX_EDGES}, truncating`);
+            KGLog.warn('GraphVisualizer.init', `Node count ${nodeCount} exceeds limit ${MAX_NODES}, applying smart sampling`);
+            // 保留重要节点（有更多连接的节点）
+            const nodeConnectionCount = {};
+            edgesData.forEach(e => {
+                nodeConnectionCount[e.from] = (nodeConnectionCount[e.from] || 0) + 1;
+                nodeConnectionCount[e.to] = (nodeConnectionCount[e.to] || 0) + 1;
+            });
+
+            // 按连接数排序，保留连接最多的节点
+            nodesData = nodesData.slice().sort((a, b) =>
+                (nodeConnectionCount[b.id] || 0) - (nodeConnectionCount[a.id] || 0)
+            ).slice(0, MAX_NODES);
+
+            // 创建有效节点ID集合
+            const validNodeIds = new Set(nodesData.map(n => n.id));
+
+            // 过滤无效边（边两端都必须在有效节点集合中）
+            const originalEdgeCount = edgesData.length;
+            edgesData = edgesData.filter(e => validNodeIds.has(e.from) && validNodeIds.has(e.to));
+
+            // 如果边数仍超限，再截断
+            if (edgesData.length > MAX_EDGES) {
+                edgesData = edgesData.slice(0, MAX_EDGES);
+            }
+
+            KGLog.info('GraphVisualizer.init', `Smart sampling: ${nodeCount}→${nodesData.length} nodes, ${originalEdgeCount}→${edgesData.length} edges`);
+        } else if (edgeCount > MAX_EDGES) {
+            KGLog.warn('GraphVisualizer.init', `Edge count ${edgeCount} exceeds limit ${MAX_EDGES}, truncating`);
             edgesData = edgesData.slice(0, MAX_EDGES);
         }
         try {
@@ -304,6 +352,14 @@ class GraphVisualizer {
      * Highlight connected nodes
      */
     highlightConnected(nodeId) {
+        // Bug #136 fix: 使用节流版本
+        this._throttledHighlightConnected(nodeId);
+    }
+
+    /**
+     * Internal highlight connected nodes implementation
+     */
+    _highlightConnectedImpl(nodeId) {
         KGLog.entry('GraphVisualizer.highlightConnected', `nodeId=${nodeId}`);
         if (!this.network || !this.nodes || !this.edges) {
             KGLog.warn('GraphVisualizer.highlightConnected', 'network/nodes/edges is null, skipping');
